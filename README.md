@@ -18,7 +18,8 @@ The effect of one Innervate was allowed to vary nonlinearly with fight duration.
 
 Covariates for the primary model were selected according to their plausible causal role rather than statistical significance. 
 Variables measured before or independently of Innervate assignment, such as player gear, raid composition, number of Druids, and relevant external-buff availability, were considered potential confounders. 
-Realized encounter-level mana gains, including mana gained from Vampiric Touch and Judgment of Wisdom, were treated primarily as sensitivity variables because they occur during the encounter and may partly reflect player behavior or other processes downstream of treatment. 
+
+Other major sources of mana gains, such as Vampiric Touch and Judgment of Wisdom, were treated primarily as sensitivity variables because they occur during the encounter and may partly reflect player behavior or other processes downstream of treatment. 
 Similarly, variables such as Destruction Potion use were not included in the primary adjustment set because they may represent mechanisms through which additional mana is converted into DPS.
 
 <img src="/CodeCogsEqn.png" />
