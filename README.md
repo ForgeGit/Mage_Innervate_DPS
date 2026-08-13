@@ -5,6 +5,7 @@
 Warcraft Logs reports were filtered to remove duplicate logs and encounters outside Serpentshrine Cavern (SSC) and Tempest Keep (TK). 
 Wipes were excluded, as were Mage encounters in which the player died before the end of the fight. 
 The resulting estimand therefore applies to Arcane Mages surviving successful SSC/TK boss kills. 
+
 Each Arcane Mage × boss encounter was treated as one observation, resulting in XX,XXX observations from 1,949 unique players.
 
 An Innervate was considered valid if it was cast before or during the encounter and at least 20 seconds before the encounter ended.
