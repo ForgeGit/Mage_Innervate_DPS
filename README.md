@@ -9,7 +9,7 @@ Each Arcane Mage × boss encounter was treated as one observation, resulting in 
 
 An Innervate was considered valid if it was cast before or during the encounter and at least 20 seconds before the encounter ended.
 
-<img src="img/owo.png" />
+<img src="/owo.png" />
 
 Arcane Mage DPS was modeled using a Generalized Additive Model (GAM) fitted with bam(). 
 The model included boss effects, boss-specific nonlinear relationships between fight duration and DPS, persistent differences between individual Mages, and measured player- and raid-level characteristics that could plausibly influence both Innervate allocation and DPS. 
@@ -20,7 +20,7 @@ Variables measured before or independently of Innervate assignment, such as play
 Realized encounter-level mana gains, including mana gained from Vampiric Touch and Judgment of Wisdom, were treated primarily as sensitivity variables because they occur during the encounter and may partly reflect player behavior or other processes downstream of treatment. 
 Similarly, variables such as Destruction Potion use were not included in the primary adjustment set because they may represent mechanisms through which additional mana is converted into DPS.
 
-<img src="img/CodeCogsEqn.png" />
+<img src="/CodeCogsEqn.png" />
 
 After fitting this model, DPS was predicted for every encounter under two scenarios:
 
