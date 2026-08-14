@@ -29,7 +29,7 @@ These results should also not be interpreted in a vacuum. Giving an Innervate to
 ### - Data Cleaning (Valid Logs)
 Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in 21,034 total Mage-encounter observations.
 
-<img src="/owo.png" />
+<img src="/temporaruy.png" />
 
 ### - Exposure Definition (Valid Innervates)
 An Innervate was considered valid if it was cast before or during the encounter and at least 20 seconds before the encounter ended. Innervates were classified into three categories (0, 1, or 2+).
