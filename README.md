@@ -29,7 +29,7 @@ These results should also not be interpreted in a vacuum. Giving an Innervate to
 ## Methods
 
 ### - Data Cleaning (Valid Logs)
-Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in XX,XXX total Mage-encounter observations.
+Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in 12,830 total Mage-encounter observations.
 
 <img src="/owo.png" />
 
@@ -44,7 +44,7 @@ We estimated the causal effect of Innervate on Arcane Mage DPS using a Generaliz
 - <ins>**External Buffs**</ins>: Number of `Power Infusions` received and uptime on `Moonkin Aura`
 - <ins>**Exposure Dynamics**</ins>: The effect of Innervate was modeled as a smooth interaction with fight duration to capture non-linear DPS returns across varying encounter lengths.
 
-These covariates were selected according to their plausible causal role, rather than statistical significance. Nevertheless, all except XX were statistically significant. 
+The fitted model explained 93.0% of observed deviance (Radj2=0.918). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and Power Infusion were statistically associated with DPS, whereas Moonkin Aura uptime was not (p=0.58).
 
 $$
 \mathrm{DPS}_i = \beta_0 + \beta_1 \mathrm{Innervate}_i + \boldsymbol{\beta X}_i + u_{\mathrm{Mage}[i]} + f_{\mathrm{Boss}[i]}(\mathrm{Duration}_i) + g(\mathrm{Duration}_i)\,\mathrm{Innervate}_i + \varepsilon_i
@@ -60,15 +60,13 @@ Here, *i* represents one Mage–encounter observation. **β₀** is the baseline
 - `Destruction Potion` use was excluded in the model because it may be a mechanism through which additional mana is converted into DPS (it is a result of). When tested as a sensitivity variable, it did not meaningfully improve model fit or change the effect estimate due to low number of observations.
 - Similarly, major sources of mana gains such as `Vampiric Touch` and `Judgment of Wisdom`, were treated primarily as sensitivity variables because they are part of the causal pathway that generates additional DPS with Innervate (more mana gains means proportionally more AB casts, which in turns will lead to more hits on target and more DPS).
 
-The model here explains ~93.6% of deviance in the observed data.
-
 ### - Estimation
 From our model estimation counterfactual DPS outcomes were predicted for every encounter under two scenario conditions:
 
 - (A) $Y^{(1)}$: Exactly one valid Innervate received.
 - (B) $Y^{(0)}$: Zero Innervates received.
 
-All other measured covariates were held constant. 
+All other measured covariates were held at their observed values. 
 
 The individual "exposure to Innervate" effect was calculated as $Y^{(1)} - Y^{(0)}$ or in other words "Scenario A minus Scenario B".
 
