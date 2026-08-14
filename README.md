@@ -1,7 +1,7 @@
 # **Innervate Returns on Arcane Mage DPS**
-### _A Real-World Analysis of 833 Logs and 4,835 Encounters in TBC Classic Anniversary_
+### _A Real-World Analysis of 1,650 Logs containing 9,501 Encounters in TBC Classic Anniversary_
 
-Simulations (_sims_) are useful but sometimes questioned [[1](https://discord.com/channels/253212375790911489/817495452328001536/1534925337581064302)] because the simplified scenarios they simulate (‘_Patchwerk fights_’) [[2](<https://github.com/ForgeGit/naxx_mage_movement>)] can differ substantially from real raid encounters, where mechanics (‘_don’t stand on fire_’) and player execution carry a significant role [[3](<https://github.com/ForgeGit/class_cope>)].
+Simulations (_sims_) are useful but sometimes questioned [[1](https://discord.com/channels/253212375790911489/817495452328001536/1534925337581064302)] because the simplified scenarios they simulate (‘_Patchwerk fights_’) [[2](<https://github.com/ForgeGit/naxx_mage_movement>)] can differ substantially from real raid encounters, where mechanics (‘"_don’t stand on fire_"’) and player execution carry a significant role [[3](<https://github.com/ForgeGit/class_cope>)].
 
 Innervate (spell ID: `29166`) is an instant-cast Druid skill with a 6-minute cooldown used to regenerate mana. When assigned to a DPS, Arcane Mages are commonly considered the best recipients [[4](https://www.wowhead.com/tbc/guide/classes/druid/feral/dps-rotation-cooldowns-abilities-pve),[5](https://www.wowhead.com/tbc/guide/classes/druid/feral/tank-rotation-cooldowns-abilities-pve)].  _Sims_ from both current and previous versions of _The Burning Crusade_ (TBC) suggest that giving Innervate to an Arcane Mage can increase their damage output by at least ~100 DPS [[6](https://discord.com/channels/253212375790911489/817495452328001536/837273535356862465),[7](https://discord.com/channels/253212375790911489/817495452328001536/884173843248316486),[8](https://discord.com/channels/253212375790911489/817495452328001536/1535312592111927396),[9](https://discord.com/channels/253212375790911489/812641242222821376/972068177964068875),[10](https://discord.com/channels/253212375790911489/812641242222821376/820088886171533370)].
 
@@ -12,24 +12,22 @@ The analysis adjusts for player, raid, and encounter characteristics, and is des
 
 <img src="/Figure1.png" />
 
-Between Jul 31, 2026 and Aug 07, 2026, the data included a total of 1,949 unique Arcane Mage players. On average, a 25-player raid contained 2.68 mages and 3.05 druids. Of 52,814 Innervate casts, 88.94%  (46,973) were used on Arcane Mages. 39.1% of all Mages received at least one Innervate.
+Between Jul 31, 2026 and Aug 07, 2026, data collected included a total of 3,547 unique Arcane Mage players. On average, a 25-player raid contained 2.57 mages and 3.15 druids. Of 60,013 Innervate casts, 80.33%  (48,214) were used on Arcane Mages. 54.01% of all Mages received at least one Innervate.
 
-Receiving exactly one Innervate instead of none was associated with an estimated average gain of +112.6 DPS (95% CI: 111.9–113.2). Importantly, the estimated benefit varied substantially with fight duration.
+Receiving exactly one Innervate instead of none was associated with an estimated average gain of +114.8 DPS (95% CI: 114.3–115.4). Importantly, the estimated benefit varied substantially with fight duration. The largest predicted gains occurred in very short encounters (<130 seconds), reaching approximately +268 DPS for encounters lasting 60 seconds (95% CI: 240–295).
 
-The largest predicted gains occurred in very short encounters (<120 seconds), reaching approximately +266 DPS at the peak (95% CI: 231.9–300.7). Across many mid-length fights, the estimated gain waved between +70 and +125 DPS.
-
-The larger predicted DPS gains in very short encounters likely reflect not only the mana restored by Innervate (allowing for more Arcane Blasts), but also the choices that additional mana enables. In addition to Arcane Blast spam casting, additional mana allows Mages to use Destruction Potions, Molten Armor, and other raw DPS consumables instead of more mana-conservative alternatives.
+The larger predicted DPS gains in very short encounters might not only reflect the change in rotation (more Arcane Blasts) from mana restored by Innervate, but also the choices that additional mana enables. In addition to Arcane Blast spam casting, additional mana allows Mages to use Destruction Potions, Molten Armor, and other raw DPS consumables instead of more mana-conservative alternatives.
 
 <img src="/Figure2.png" />
 
-Raids with shorter kill times were also more likely to give at least one innervate to an Arcane Mage. This relationship is important because Innervate assignment is not random. Better-geared or better-performing raids tend to kill bosses faster and may also use available raid resources more deliberately. As raids gain gear and become more comfortable with encounter mechanics, they may also have less reason to reserve Innervate for healers or other defensive purposes (e.g. battle rez'd teammate)
+Raids with shorter kill times were also more likely to have give at least one Innervate to an Arcane Mage. This relationship is important because Innervate assignment is not random. Better-geared or better-performing raids tend to kill bosses faster and may also use available raid resources more deliberately. As raids gain gear and become more comfortable with encounter mechanics, they may also have less reason to reserve Innervate for healers or other defensive purposes (e.g. battle rez'd teammate)
 
 These results should also not be interpreted in a vacuum. Giving an Innervate to an AFK Mage will effectively provide [0 DPS](https://fresh.warcraftlogs.com/reports/a:aYCcnqmZJD674vjK?fight=25&pins=0%24Main%24%23244F4B%24auras-cast%24-4%240.0.0.Any%240.0.0.Any%24true%2446980252.0.0.Mage%24true%2429166%2432&source=40). Likewise, a high-performing Arcane Mage may not be able to convert the full theoretical value of an Innervate into damage in every encounter. Fight duration, mechanics, movement, player execution, and the performance of the rest of the raid all influence how useful that additional mana will be in practice.
 
 ## Methods
 
 ### - Data Cleaning (Valid Logs)
-Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in 12,830 total Mage-encounter observations.
+Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in 21,034 total Mage-encounter observations.
 
 <img src="/owo.png" />
 
@@ -44,7 +42,7 @@ We estimated the causal effect of Innervate on Arcane Mage DPS using a Generaliz
 - <ins>**External Buffs**</ins>: Number of `Power Infusions` received; Uptime on `Moonkin Aura`
 - <ins>**Exposure Dynamics**</ins>: The effect of Innervate was modeled as a smooth interaction with fight duration to capture non-linear DPS returns across varying encounter lengths.
 
-The fitted model explained 93.0% of observed deviance (Radj2=0.918). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and Power Infusion were statistically associated with DPS, whereas Moonkin Aura uptime was not (p=0.58).
+The fitted model explained 92.8% of observed deviance ($R^2_{\mathrm{adj}} = 0.916$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and Power Infusion were statistically associated with DPS, whereas Moonkin Aura uptime was not (p=0.58).
 
 $$
 \mathrm{DPS}_i = \beta_0 + \beta_1 \mathrm{Innervate}_i + \boldsymbol{\beta X}_i + u_{\mathrm{Mage}[i]} + f_{\mathrm{Boss}[i]}(\mathrm{Duration}_i) + g(\mathrm{Duration}_i)\,\mathrm{Innervate}_i + \varepsilon_i
