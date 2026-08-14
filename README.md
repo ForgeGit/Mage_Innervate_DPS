@@ -10,7 +10,7 @@ Using real-world data (logs from _Warcraft Logs_), I estimated the effect of Inn
 The analysis adjusts for player, raid, and encounter characteristics, and is designed to answer the question: 
 > "For fights like those observed in SSC/TK, how much additional DPS would we expect if an Arcane Mage received exactly one Innervate instead of none?"
 
-<img src="/Figure1.png" />
+<img src="/figure1.png" />
 
 Between Jul 31, 2026 and Aug 07, 2026, data collected included a total of 3,547 unique Arcane Mage players. On average, a 25-player raid contained 2.57 mages and 3.15 druids. Of 60,013 Innervate casts, 80.33%  (48,214) were used on Arcane Mages. 54.01% of all Mages received at least one Innervate.
 
@@ -18,9 +18,9 @@ Receiving exactly one Innervate instead of none was associated with an estimated
 
 The larger predicted DPS gains in very short encounters might not only reflect the change in rotation (more Arcane Blasts) from mana restored by Innervate, but also the choices that additional mana enables. In addition to Arcane Blast spam casting, additional mana allows Mages to use Destruction Potions, Molten Armor, and other raw DPS consumables instead of more mana-conservative alternatives.
 
-<img src="/Figure2.png" />
+<img src="/figure2.png" />
 
-Raids with shorter kill times were also more likely to have give at least one Innervate to an Arcane Mage. This relationship is important because Innervate assignment is not random. Better-geared or better-performing raids tend to kill bosses faster and may also use available raid resources more deliberately. As raids gain gear and become more comfortable with encounter mechanics, they may also have less reason to reserve Innervate for healers or other defensive purposes (e.g. battle rez'd teammate)
+Raids with shorter kill times were also more likely to give at least one Innervate to an Arcane Mage. This relationship is important because Innervate assignment is not random. Better-geared or better-performing raids tend to kill bosses faster and may also use available raid resources more deliberately. As raids gain gear and become more comfortable with encounter mechanics, they may also have less reason to reserve Innervate for healers or other defensive purposes (e.g. battle rez'd teammate)
 
 These results should also not be interpreted in a vacuum. Giving an Innervate to an AFK Mage will effectively provide [0 DPS](https://fresh.warcraftlogs.com/reports/a:aYCcnqmZJD674vjK?fight=25&pins=0%24Main%24%23244F4B%24auras-cast%24-4%240.0.0.Any%240.0.0.Any%24true%2446980252.0.0.Mage%24true%2429166%2432&source=40). Likewise, a high-performing Arcane Mage may not be able to convert the full theoretical value of an Innervate into damage in every encounter. Fight duration, mechanics, movement, player execution, and the performance of the rest of the raid all influence how useful that additional mana will be in practice.
 
