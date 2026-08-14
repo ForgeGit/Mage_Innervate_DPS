@@ -42,13 +42,13 @@ We estimated the causal effect of Innervate on Arcane Mage DPS using a Generaliz
 - <ins>**External Buffs**</ins>: Number of `Power Infusions` received; Uptime on `Moonkin Aura`
 - <ins>**Exposure Dynamics**</ins>: The effect of Innervate was modeled as a smooth interaction with fight duration to capture non-linear DPS returns across varying encounter lengths.
 
-The fitted model explained 92.8% of observed deviance ($R^2_{\mathrm{adj}} = 0.916$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and Power Infusion were statistically associated with DPS, whereas Moonkin Aura uptime was not (p=0.58).
+The fitted model explained 92.8% of observed deviance ($R^2_{\mathrm{adj}} = 0.916$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and `Power Infusion` were statistically associated with DPS, whereas `Moonkin Aura` uptime was not (p=0.58).
 
 $$
 \mathrm{DPS}_i = \beta_0 + \beta_1 \mathrm{Innervate}_i + \boldsymbol{\beta X}_i + u_{\mathrm{Mage}[i]} + f_{\mathrm{Boss}[i]}(\mathrm{Duration}_i) + g(\mathrm{Duration}_i)\,\mathrm{Innervate}_i + \varepsilon_i
 $$
 
-Here, *i* represents one Mage–encounter observation. **β₀** is the baseline DPS; **β₁** is the average shift associated with receiving one Innervate; and **βXᵢ** represents the measured adjustment variables (gear difference, number of Druids, Power Infusion, uptime, and boss).
+Here, *i* represents one Mage–encounter observation. **β₀** is the baseline DPS; **β₁** is the average shift associated with receiving one Innervate; and **βXᵢ** represents the measured adjustment variables (gear difference, number of Druids, `Power Infusion`, `Moonkin Aura` uptime, and boss).
 
 **u<sub>Mage[i]</sub>** accounts for persistent differences between individual Mages, **f<sub>Boss[i]</sub>(Durationᵢ)** allows the relationship between fight duration and DPS to differ by boss, and **g(Durationᵢ) × Innervateᵢ** allows the additional DPS from Innervate to change with fight duration. **εᵢ** is the remaining unexplained variation in DPS.
 
@@ -72,7 +72,7 @@ To account for within-player correlation across multiple boss encounters and rai
 
 ## Assumptions and limitations
 
-Results generalize strictly to completed boss kills where the Mage survived the entire encounter. Hypotethically, if an Innervate makes a really greedy Made play more risky, and in turns leads to that mage dying, that isn't accounted for.
+Results generalize strictly to completed boss kills where the Mage survived the entire encounter. Hypotethically, if an Innervate makes a really greedy Mage play more risky, and this in turn leads to that Mage death, that isn't something we can account for.
 
 Innervates casts differ in timing and are not really assigned at random. So even though we tried to account for player random effects in our model, as well as introducing additional uncertainty propagation with clustered bootstraping, there will always be some unemasured coordination that conditions that Innervate assignment. 
 
