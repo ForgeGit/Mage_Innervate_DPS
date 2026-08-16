@@ -14,7 +14,7 @@ The analysis adjusts for player, raid, and encounter characteristics, and is des
 
 Between Jul 31, 2026 and Aug 07, 2026, data collected included a total of 3,547 unique Arcane Mage players. On average, a 25-player raid contained 2.57 mages and 3.15 druids. Of 60,013 Innervate casts, 80.33%  (48,214) were used on Arcane Mages. 54.01% of all Mages received at least one Innervate.
 
-Receiving exactly one Innervate instead of none was associated with an estimated average gain of +114.8 DPS (95% CI: 114.3–115.4). Importantly, the estimated benefit varied substantially with fight duration. The largest predicted gains occurred in very short encounters (<130 seconds), reaching approximately +268 DPS for encounters lasting 60 seconds (95% CI: 240–295).
+Receiving exactly one Innervate instead of none was associated with an estimated average gain of +115.6 DPS (95% CI: 108.5–123.0). Importantly, the estimated benefit varied substantially with fight duration. The largest predicted gains occurred in very short encounters (<130 seconds), reaching approximately +253 DPS for encounters lasting 60 seconds (95% CI: 190.6–324.7).
 
 The larger predicted DPS gains in very short encounters might not only reflect the change in rotation (more Arcane Blasts) from mana restored by Innervate, but also the choices that additional mana enables. In addition to Arcane Blast spam casting, additional mana allows Mages to use Destruction Potions, Molten Armor, and other raw DPS consumables instead of more mana-conservative alternatives.
 
