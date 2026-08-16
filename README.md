@@ -40,7 +40,7 @@ We estimated the causal effect of Innervate on Arcane Mage DPS using a Gaussian 
 - <ins>**External Buffs**</ins>: Number of `Power Infusions` received; Uptime on `Moonkin Aura`
 - <ins>**Exposure Dynamics**</ins>: The effect of Innervate was modeled as a smooth interaction with fight duration to capture non-linear DPS returns across varying encounter lengths.
 
-The fitted model explained 93% of observed deviance ($R^2_{\mathrm{adj}} = 0.918$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and `Power Infusion` were statistically associated with DPS, whereas `Moonkin Aura` uptime was not (p=0.58).
+The fitted model explained 93% of observed deviance ($R^2_{\mathrm{adj}} = 0.918$). These covariates were selected according to their plausible causal role, rather than statistical significance. All the linear adjustment variables were statistically associated with DPS.
 
 $$
 \mathrm{DPS}_i = \beta_0 + \beta_1 \mathrm{Innervate}_i + \boldsymbol{\beta X}_i + u_{\mathrm{Mage}[i]} + f_{\mathrm{Boss}[i]}(\mathrm{Duration}_i) + g(\mathrm{Duration}_i)\,\mathrm{Innervate}_i + \varepsilon_i
