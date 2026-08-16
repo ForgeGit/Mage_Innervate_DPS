@@ -1,0 +1,603 @@
+---
+title: "Extraction"
+date: "2026-08-07"
+output: html_document
+---
+
+# Requirements
+
+## + Libraries:
+
+- Having a Warcraft Logs account -> Settings
+- Create a v2 API Key
+    .Copy your client ID
+    .Copy your client secret
+
+```{r}
+remotes::install_github("jruizcabrejos/wclR")
+library(wclR)
+library(tidyverse)
+```
+
+## + API Key
+
+```{r}
+Sys.setenv(
+  Sys.getenv("WCLR_CLIENT_ID"),
+  Sys.getenv("WCLR_CLIENT_SECRET")
+)
+```
+
+# Get data
+
+## + Reports
+
+```{r}
+# df_reports <- wclR::wcl_reports(1056,pages=1:25)
+
+df_reports <- read_csv("./data/df_reports.csv")
+```
+
+```{r}
+V_REPORTS <- df_reports$logID
+N_REPORTS <- nrow(df_reports)
+```
+
+## + Fights
+
+```{r}
+df_fights <- data.frame()
+
+for(i in 1:N_REPORTS){
+  
+  df_fights <- bind_rows(df_fights,
+                         wcl_fights(V_REPORTS[i]))
+  
+  print(i)
+  
+}
+
+# write_csv(df_fights,"./df_fights.csv")
+df_fights <- read_csv("./df_fights.csv")
+```
+
+This is a very aggresive filter - Ideally, group composition should be used + use duration rounded to the closest integer.
+
+```{r}
+df_fights_clean <- wcl_distinct_fights(
+  df_fights,
+  by = c(
+    "encounterID", "difficulty",
+    "size", "kill",
+    "bossPercentage", "duration",
+    "averageItemLevel")
+)
+```
+
+
+```{r}
+VALID_ENCOUNTERS <- c(100623, # Hydross the Unstable
+                      100624, # The Lurker Below
+                      100625, # Leotheras the Blind
+                      100626, # Fathom-Lord Karathress
+                      100627, # Morogrim Tidewalker
+                      100628, # Lady Vashj
+                      
+                      100730, # Al'ar 
+                      100731, # Void Reaver
+                      100732, # High Astromancer Solarian
+                      100733  # Kael'thas Sunstrider
+)
+
+df_fights_clean_2 <- df_fights_clean %>%
+  filter(encounterID %in% VALID_ENCOUNTERS)
+```
+
+
+```{r}
+df_fights_clean_2 %>%
+  group_by(kill) %>%
+  summarise(mean_time = mean(duration_s),
+            min_time = min(duration_s),
+            max_time = max(duration_s))
+
+df_fights_clean_2 %>%
+  ggplot() +
+  geom_histogram(aes(x=duration_s)) +
+  facet_wrap(.~kill) +
+  scale_x_continuous(limits=c(0,100))
+```
+
+```{r}
+df_fights_clean_3 <- df_fights_clean_2 %>%
+  filter(!(duration_s<=30 & kill==F))
+```
+
+
+```{r}
+V_REPORTS_CLEAN <- df_fights_clean_3 %>% 
+  dplyr::select(logID) %>% pull(.) %>% unique(.)
+```
+
+From this point onwards, it is more efficient to only look at Kills, not 
+
+## + Events (Innervate)
+
+```{r}
+N_FIGHTS<- nrow(df_fights_clean_3)
+
+df_fights_clean_3 %>%
+  group_by(kill) %>%
+  summarize(n=n())
+```
+
+```{r}
+df_events <- data.frame()
+df_errors <- data.frame()
+
+for (i in 1:N_FIGHTS) {
+  i_REPORT <- df_fights_clean_3$logID[i]
+  i_FIGHT  <- df_fights_clean_3$fightID[i]
+  i_STARTTIME  <- df_fights_clean_3$startTime[i]-10
+  i_ENDTIME  <- df_fights_clean_3$endTime[i]+10
+  
+  res <- NULL
+  success <- FALSE
+  max_retries <- 2
+  attempts <- 0
+  
+  while (!success && attempts < max_retries) {
+    attempts <- attempts + 1
+    
+    res <- tryCatch(
+      expr = {
+        wcl_events(
+          report_code       = i_REPORT,
+          fight_id          = i_FIGHT,
+          data_type         = "All",
+          hostility_type    = "Friendlies",
+          filter_expression = "ability.id = 29166",
+          start_time = i_STARTTIME,
+          end_time = i_ENDTIME
+        )
+      },
+      error = function(e) {
+        if (!exists("df_errors")) {
+          df_errors <<- data.frame(
+            i         = integer(),
+            logID     = character(),
+            fightID   = integer(),
+            attempt   = integer(),
+            error_msg = character(),
+            timestamp = POSIXct(),
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        df_errors <<- dplyr::bind_rows(
+          df_errors,
+          data.frame(
+            i         = i,
+            logID     = i_REPORT,
+            fightID   = i_FIGHT,
+            attempt   = attempts,
+            error_msg = e$message,
+            timestamp = Sys.time(),
+            stringsAsFactors = FALSE
+          )
+        )
+        
+        # Return the error object to check the message outside tryCatch
+        return(e)
+      }
+    )
+    
+    # Check if the result was successful or an error was caught
+    if (inherits(res, "error")) {
+      perm_error_msg <- "Warcraft Logs GraphQL error: You do not have permission to view this report."
+      
+      if (grepl(perm_error_msg, res$message, fixed = TRUE)) {
+        print(paste0("Permission denied for ", i_REPORT, " - skipping immediately to next report."))
+        res <- NULL
+        break # Exit while loop and move to next iteration of i
+      } else if (attempts < max_retries) {
+        print(paste0("Other error on iteration ", i, ". Waiting 50 minutes before retrying (Attempt ", attempts, " of ", max_retries, ")..."))
+        res <- NULL
+        Sys.sleep(3000)
+      } else {
+        res <- NULL
+      }
+    } else if (!is.null(res)) {
+      success <- TRUE
+    }
+  }
+  
+  if (!is.null(res)) {
+    df_events <- dplyr::bind_rows(df_events, res)
+  }
+  
+  print(paste0(i, " out of ", N_FIGHTS, " - ", i_REPORT, " ", i_FIGHT))
+}
+  
+  
+  
+# write_csv(df_events %>% dplyr::select(-c(classResources)),"./df_events_3.csv")
+df_events <- read_csv("./df_events_3.csv")
+```
+
+
+## + Deaths
+
+```{r}
+df_events_deaths <- data.frame()
+df_errors <- data.frame()
+
+for (i in 1:N_FIGHTS) {
+  i_REPORT <- df_fights_clean_3$logID[i]
+  i_FIGHT  <- df_fights_clean_3$fightID[i]
+  i_STARTTIME  <- df_fights_clean_3$startTime[i]-10
+  i_ENDTIME  <- df_fights_clean_3$endTime[i]+10
+  
+  res <- NULL
+  success <- FALSE
+  max_retries <- 2
+  attempts <- 0
+  
+  while (!success && attempts < max_retries) {
+    attempts <- attempts + 1
+    
+    res <- tryCatch(
+      expr = {
+        wcl_events(
+          report_code       = i_REPORT,
+          fight_id          = i_FIGHT,
+          data_type         = "Deaths",
+          hostility_type    = "Friendlies",
+          # filter_expression = "ability.id = 29166",
+          start_time = i_STARTTIME,
+          end_time = i_ENDTIME
+        )
+      },
+      error = function(e) {
+        if (!exists("df_errors")) {
+          df_errors <<- data.frame(
+            i         = integer(),
+            logID     = character(),
+            fightID   = integer(),
+            attempt   = integer(),
+            error_msg = character(),
+            timestamp = POSIXct(),
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        df_errors <<- dplyr::bind_rows(
+          df_errors,
+          data.frame(
+            i         = i,
+            logID     = i_REPORT,
+            fightID   = i_FIGHT,
+            attempt   = attempts,
+            error_msg = e$message,
+            timestamp = Sys.time(),
+            stringsAsFactors = FALSE
+          )
+        )
+        
+        # Return the error object to check the message outside tryCatch
+        return(e)
+      }
+    )
+    
+    # Check if the result was successful or an error was caught
+    if (inherits(res, "error")) {
+      perm_error_msg <- "Warcraft Logs GraphQL error: You do not have permission to view this report."
+      
+      if (grepl(perm_error_msg, res$message, fixed = TRUE)) {
+        print(paste0("Permission denied for ", i_REPORT, " - skipping immediately to next report."))
+        res <- NULL
+        break # Exit while loop and move to next iteration of i
+      } else if (attempts < max_retries) {
+        print(paste0("Other error on iteration ", i, ". Waiting 50 minutes before retrying (Attempt ", attempts, " of ", max_retries, ")..."))
+        res <- NULL
+        Sys.sleep(3000)
+      } else {
+        res <- NULL
+      }
+    } else if (!is.null(res)) {
+      success <- TRUE
+    }
+  }
+  
+  if (!is.null(res)) {
+    df_events_deaths <- dplyr::bind_rows(df_events_deaths, res)
+  }
+  
+  print(paste0(i, " out of ", N_FIGHTS, " - ", i_REPORT, " ", i_FIGHT))
+}
+  
+  
+# write_csv(df_events_deaths,"./df_events_deaths.csv")
+df_events_deaths <- read_csv("./df_events_deaths.csv")
+```
+
+
+## + Parses
+
+At this point I should have filtered by logs with deaths/nondeaths.
+This procedure could also be done after "Fights" extraction.
+
+```{r}
+df_parses <- data.frame()
+df_errors <- data.frame()
+
+N_REPORTS_CLEAN <- length(V_REPORTS_CLEAN)
+
+for (i in 1:N_REPORTS_CLEAN) {
+  i_REPORT <- V_REPORTS_CLEAN[i]
+  
+  res <- NULL
+  success <- FALSE
+  max_retries <- 2
+  attempts <- 0
+  
+  while (!success && attempts < max_retries) {
+    attempts <- attempts + 1
+    
+    res <- tryCatch(
+      expr = {
+        wcl_report_rankings(
+          report_code       = i_REPORT,
+          timeframe         = "Historical",
+        )
+      },
+      error = function(e) {
+        if (!exists("df_errors")) {
+          df_errors <<- data.frame(
+            i         = integer(),
+            logID     = character(),
+            attempt   = integer(),
+            error_msg = character(),
+            timestamp = POSIXct(),
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        df_errors <<- dplyr::bind_rows(
+          df_errors,
+          data.frame(
+            i         = i,
+            logID     = i_REPORT,
+            attempt   = attempts,
+            error_msg = e$message,
+            timestamp = Sys.time(),
+            stringsAsFactors = FALSE
+          )
+        )
+        
+        # Return the error object to check the message outside tryCatch
+        return(e)
+      }
+    )
+    
+    # Check if the result was successful or an error was caught
+    if (inherits(res, "error")) {
+      perm_error_msg <- "Warcraft Logs GraphQL error: You do not have permission to view this report."
+      
+      if (grepl(perm_error_msg, res$message, fixed = TRUE)) {
+        print(paste0("Permission denied for ", i_REPORT, " - skipping immediately to next report."))
+        res <- NULL
+        break # Exit while loop and move to next iteration of i
+      } else if (attempts < max_retries) {
+        print(paste0("Other error on iteration ", i, ". Waiting 50 minutes before retrying (Attempt ", attempts, " of ", max_retries, ")..."))
+        res <- NULL
+        Sys.sleep(3450)
+      } else {
+        res <- NULL
+      }
+    } else if (!is.null(res)) {
+      success <- TRUE
+    }
+  }
+  
+  if (!is.null(res)) {
+    df_parses <- dplyr::bind_rows(df_parses , res)
+  }
+  
+  print(paste0(i, " out of ", N_REPORTS_CLEAN, " - ", i_REPORT))
+}
+  
+  
+write_csv(df_parses,"./df_parses.csv")
+# df_parses <- read_csv("./df_parses.csv")
+```
+
+
+## + Players
+
+```{r}
+df_players_detail <- data.frame()
+df_errors <- data.frame()
+
+N_FIGHTS_VALID <- nrow(df_fights_clean_3)
+
+for (i in 1:nrow(df_fights_clean_3)) {
+  
+  i_REPORT <- df_fights_clean_3$logID[i]
+  i_FIGHT  <- df_fights_clean_3$fightID[i]
+  
+  res <- NULL
+  success <- FALSE
+  max_retries <- 2
+  attempts <- 0
+  
+  while (!success && attempts < max_retries) {
+    attempts <- attempts + 1
+    
+    res <- tryCatch(
+      expr = {
+        wcl_player_details(
+          report_code       = i_REPORT,
+          fight_id = i_FIGHT
+          )
+      },
+      error = function(e) {
+        if (!exists("df_errors")) {
+          df_errors <<- data.frame(
+            i         = integer(),
+            logID     = character(),
+            attempt   = integer(),
+            error_msg = character(),
+            timestamp = POSIXct(),
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        df_errors <<- dplyr::bind_rows(
+          df_errors,
+          data.frame(
+            i         = i,
+            logID     = i_REPORT,
+            attempt   = attempts,
+            error_msg = e$message,
+            timestamp = Sys.time(),
+            stringsAsFactors = FALSE
+          )
+        )
+        
+        # Return the error object to check the message outside tryCatch
+        return(e)
+      }
+    )
+    
+    # Check if the result was successful or an error was caught
+    if (inherits(res, "error")) {
+      perm_error_msg <- "Warcraft Logs GraphQL error: You do not have permission to view this report."
+      
+      if (grepl(perm_error_msg, res$message, fixed = TRUE)) {
+        print(paste0("Permission denied for ", i_REPORT, " - skipping immediately to next report."))
+        res <- NULL
+        break # Exit while loop and move to next iteration of i
+      } else if (attempts < max_retries) {
+        print(paste0("Other error on iteration ", i, ". Waiting 50 minutes before retrying (Attempt ", attempts, " of ", max_retries, ")..."))
+        res <- NULL
+        Sys.sleep(3450)
+      } else {
+        res <- NULL
+      }
+    } else if (!is.null(res)) {
+      success <- TRUE
+    }
+  }
+  
+  if (!is.null(res)) {
+    df_players_detail <- dplyr::bind_rows(df_players_detail , res)
+  }
+  
+  print(paste0(i, " out of ", N_FIGHTS_VALID, " - ", i_REPORT))
+}
+  
+  
+write_csv(df_players_detail,"./df_players_detail.csv")
+# df_players_detail <- read_csv("./df_players_detail.csv")
+
+
+```
+
+
+## + Events (Buffs)
+
+Loop number 5778 messed up during the initial extraction. This log therefore has been excluded in the final analysis:
+pfQALavGTBzngxXq
+
+```{r}
+df_events_buffs <- data.frame()
+df_errors <- data.frame()
+
+for (i in 1:N_FIGHTS) {
+  i_REPORT <- df_fights_clean_3$logID[i]
+  i_FIGHT  <- df_fights_clean_3$fightID[i]
+  i_STARTTIME  <- df_fights_clean_3$startTime[i]-10
+  i_ENDTIME  <- df_fights_clean_3$endTime[i]+10
+  
+  res <- NULL
+  success <- FALSE
+  max_retries <- 2
+  attempts <- 0
+  
+  while (!success && attempts < max_retries) {
+    attempts <- attempts + 1
+    
+    res <- tryCatch(
+      expr = {
+        wcl_events(
+          report_code       = i_REPORT,
+          fight_id          = i_FIGHT,
+          data_type         = "All",
+          hostility_type    = "Friendlies",
+          filter_expression = "ability.id in (26635, 24907, 10060, 32182, 2825, 27165, 34919, 28508)",
+          start_time = i_STARTTIME,
+          end_time = i_ENDTIME
+        )
+      },
+      error = function(e) {
+        if (!exists("df_errors")) {
+          df_errors <<- data.frame(
+            i         = integer(),
+            logID     = character(),
+            fightID   = integer(),
+            attempt   = integer(),
+            error_msg = character(),
+            timestamp = POSIXct(),
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        df_errors <<- dplyr::bind_rows(
+          df_errors,
+          data.frame(
+            i         = i,
+            logID     = i_REPORT,
+            fightID   = i_FIGHT,
+            attempt   = attempts,
+            error_msg = e$message,
+            timestamp = Sys.time(),
+            stringsAsFactors = FALSE
+          )
+        )
+        
+        # Return the error object to check the message outside tryCatch
+        return(e)
+      }
+    )
+    
+    # Check if the result was successful or an error was caught
+    if (inherits(res, "error")) {
+      perm_error_msg <- "Warcraft Logs GraphQL error: You do not have permission to view this report."
+      
+      if (grepl(perm_error_msg, res$message, fixed = TRUE)) {
+        print(paste0("Permission denied for ", i_REPORT, " - skipping immediately to next report."))
+        res <- NULL
+        break # Exit while loop and move to next iteration of i
+      } else if (attempts < max_retries) {
+        print(paste0("Other error on iteration ", i, ". Waiting 50 minutes before retrying (Attempt ", attempts, " of ", max_retries, ")..."))
+        res <- NULL
+        Sys.sleep(3000)
+      } else {
+        res <- NULL
+      }
+    } else if (!is.null(res)) {
+      success <- TRUE
+    }
+  }
+  
+  if (!is.null(res)) {
+    df_events_buffs <- dplyr::bind_rows(df_events_buffs, res)
+  }
+  
+  print(paste0(i, " out of ", N_FIGHTS, " - ", i_REPORT, " ", i_FIGHT))
+}
+  
+write_csv(df_events_buffs,"./df_events_buffs.csv")
+# df_events_buffs <- read_csv("./df_events_buffs.csv")
+```

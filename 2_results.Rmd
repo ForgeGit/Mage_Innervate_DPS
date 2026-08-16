@@ -1,0 +1,297 @@
+---
+title: "results"
+date: "2026-08-10"
+output: html_document
+---
+
+# Settings
+
+
+```{r}
+library(showtext)
+library(ggtext)
+library(extrafont)
+
+
+font_add(family = "forgefooter", "forgefooter.ttf")
+# font_import()
+# n
+showtext_auto(TRUE)
+
+library(wclR)
+library(tidyverse)
+library(mgcv)
+```
+
+```{r}
+df <- read_csv("./data/df_analysis.csv") %>%
+  
+  mutate(mage = factor(mage),
+         boss = factor(boss),
+         logID = factor(logID),
+         
+         # Ordinary factor for the mean differences
+         vates = factor(
+           vates,
+           levels = c("0", "1","2+")
+         ),
+         
+         # Ordered copy used ONLY for the duration interaction.
+         # This makes 0 the reference curve.
+         vates_by = ordered(
+           vates_by,
+           levels = c("0", "1","2+")
+         )
+  )
+```
+
+# FITTINGS
+
+## - Fit All
+
+```{r}
+fit <- bam(amount ~ vates + ilvldiff + 
+             
+             s(mage, bs = "re")  + 
+             s(logID, bs = "re") + NDruids + 
+             
+             Destruction + Berserking +
+             PowerInfusion + uptime_pct + 
+             VT + JoW +
+             
+             boss + 
+             
+             # Baseline duration-DPS relationship can differ by boss
+             s(duration_s, by = boss,
+               k = 10, id = "boss_duration") +
+             
+             # Additional duration-dependent effect of Innervate
+             # relative to 0 Innervates
+             s(duration_s, by = vates_by,
+               k = 10, id = "inn_duration"),
+           
+           data = df, 
+           method = "fREML", discrete = F)
+```
+
+```{r}
+saveRDS(fit,"./data/fiting_all.RData")
+```
+
+
+```{r}
+summary(fit)
+gam.check(fit)
+# concurvity(fit, full = TRUE)
+
+```
+
+## - Fit Conservative
+
+```{r}
+fit_conservative <- bam(amount ~ vates + s(mage, bs = "re") + boss + 
+                          
+                          s(duration_s, by = boss,
+                            k = 20, id = "boss_duration") +
+                          s(duration_s, by = vates_by,
+                            k = 20, id = "inn_duration"),
+                        
+                        data = df, 
+                        method = "fREML", discrete = F)
+```
+
+```{r}
+saveRDS(fit_conservative,"./data/fit_conservative.RData")
+```
+
+```{r}
+summary(fit_conservative)
+gam.check(fit_conservative)
+# concurvity(fit_conservative, full = TRUE)
+```
+
+
+## - Fit Adjusted
+
+```{r}
+fit_adjusted <- bam(amount ~ vates +  ilvldiff + NDruids + PowerInfusion +
+                      s(mage, bs = "re") + 
+                      boss + 
+                      s(duration_s, by = boss,
+                        k = 20, id = "boss_duration") +
+                      
+                      s(duration_s, by = vates_by,
+                        k = 20, id = "inn_duration"),
+                    
+                    data = df, 
+                    method = "fREML", discrete = F)
+```
+
+```{r}
+saveRDS(fit_adjusted,"./data/fit_adjusted.RData")
+```
+
+```{r}
+summary(fit_adjusted)
+gam.check(fit_adjusted)
+# concurvity(fit_adjusted, full = TRUE)
+```
+
+
+## - Fit Sensitivity
+
+```{r}
+fit_sensitivity <- bam(amount ~ vates +  VT + JoW +
+                         s(mage, bs = "re") + 
+                         boss + 
+                         s(duration_s, by = boss,
+                           k = 20, id = "boss_duration") +
+                         s(duration_s, by = vates_by,
+                           k = 20, id = "inn_duration"),
+                       
+                       data = df,
+                       method = "fREML", discrete = F)
+```
+
+```{r}
+saveRDS(fit_sensitivity,"./data/fit_sensitivity.RData")
+```
+
+```{r}
+summary(fit_sensitivity)
+gam.check(fit_sensitivity)
+# concurvity(fit_sensitivity, full = TRUE)
+```
+
+## - Fit Final Model
+
+The primary adjustment set was restricted to pre-encounter characteristics and external factors plausibly associated with both Innervate allocation and DPS. Variables that could themselves be affected by Innervate like consumable use, were evaluated separately in sensitivity analyses.
+
+Log structure didn't do a thing
+
+```{r}
+fit_final_model <- bam(
+  amount ~
+    vates +
+    ilvldiff + NDruids +
+    PowerInfusion + uptime_pct + 
+    boss +
+    s(mage, bs = "re") +
+    s(duration_s, by = boss,
+      k = 10, id = "boss_duration") +
+    s(duration_s, by = vates_by,
+      k = 10, id = "inn_duration"),
+  
+  data = df,
+  method = "fREML",
+  discrete = F,
+  
+  control = gam.control(
+    maxit = 500,
+    trace = TRUE
+  )
+)
+
+```
+
+The estimated Innervate effect was robust to alternative model specifications, with similar effect curves across the minimally adjusted, confounder-adjusted, mana-adjusted, and fully adjusted models. Differences were primarily confined to longer fight durations, where observations were sparse and uncertainty was greater.
+
+```{r}
+summary(fit_final_model)
+gam.check(fit_final_model)
+concurvity(fit_final_model, full = TRUE)
+```
+
+```{r}
+saveRDS(fit_final_model,"./data/fit_final_v1.RData")
+```
+
+## - Fit Final Model 2
+
+The primary adjustment set was restricted to pre-encounter characteristics and external factors plausibly associated with both Innervate allocation and DPS. Variables that could themselves be affected by Innervate like consumable use, were evaluated separately in sensitivity analyses.
+
+Log structure didn't do a thing
+
+```{r}
+fit_final_model_2 <- bam(
+  amount ~
+    vates +
+    ilvldiff + NDruids +
+    PowerInfusion + uptime_pct +
+    VT +
+    boss +
+    s(mage, bs = "re") +
+    s(duration_s, by = boss,
+      k = 20, id = "boss_duration") +
+    s(duration_s, by = vates_by,
+      k = 20, id = "inn_duration"),
+  
+  data = df,
+  method = "fREML",
+  discrete = F,
+  
+  control = gam.control(
+    maxit = 500,
+    trace = TRUE
+  )
+)
+
+```
+
+The estimated Innervate effect was robust to alternative model specifications, with similar effect curves across the minimally adjusted, confounder-adjusted, mana-adjusted, and fully adjusted models. Differences were primarily confined to longer fight durations, where observations were sparse and uncertainty was greater.
+
+```{r}
+summary(fit_final_model_2)
+gam.check(fit_final_model_2)
+concurvity(fit_final_model_2, full = TRUE)
+```
+
+```{r}
+saveRDS(fit_final_model_2,"./data/fit_final_v2.RData")
+```
+
+
+
+## - Fit Final Model 3
+
+The primary adjustment set was restricted to pre-encounter characteristics and external factors plausibly associated with both Innervate allocation and DPS. Variables that could themselves be affected by Innervate like consumable use, were evaluated separately in sensitivity analyses.
+
+Log structure didn't do a thing
+
+```{r}
+fit_final_model_3 <- bam(
+  amount ~
+    vates +
+    ilvldiff + NDruids + Berserking + 
+    PowerInfusion + uptime_pct +
+    VT +
+    boss +
+    s(mage, bs = "re") +
+    s(duration_s, by = boss,
+      k = 20, id = "boss_duration") +
+    s(duration_s, by = vates_by,
+      k = 20, id = "inn_duration"),
+  
+  data = df,
+  method = "fREML",
+  discrete = F,
+  
+  control = gam.control(
+    maxit = 500,
+    trace = TRUE
+  )
+)
+
+```
+
+The estimated Innervate effect was robust to alternative model specifications, with similar effect curves across the minimally adjusted, confounder-adjusted, mana-adjusted, and fully adjusted models. Differences were primarily confined to longer fight durations, where observations were sparse and uncertainty was greater.
+
+```{r}
+summary(fit_final_model_3)
+gam.check(fit_final_model_3)
+concurvity(fit_final_model_3, full = TRUE)
+```
+
+```{r}
+saveRDS(fit_final_model_3,"./data/fit_final_v3.RData")
+```

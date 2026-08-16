@@ -10,7 +10,7 @@ Using real-world data (logs from _Warcraft Logs_), I estimated the effect of Inn
 The analysis adjusts for player, raid, and encounter characteristics, and is designed to answer the question: 
 > "For fights like those observed in SSC/TK, how much additional DPS would we expect if an Arcane Mage received exactly one Innervate instead of none?"
 
-<img src="/figure1.png" />
+<img src="/figure1_v3.png" />
 
 Between Jul 31, 2026 and Aug 07, 2026, data collected included a total of 3,547 unique Arcane Mage players. On average, a 25-player raid contained 2.57 mages and 3.15 druids. Of 60,013 Innervate casts, 80.33%  (48,214) were used on Arcane Mages. 54.01% of all Mages received at least one Innervate.
 
@@ -18,7 +18,7 @@ Receiving exactly one Innervate instead of none was associated with an estimated
 
 The larger predicted DPS gains in very short encounters might not only reflect the change in rotation (more Arcane Blasts) from mana restored by Innervate, but also the choices that additional mana enables. In addition to Arcane Blast spam casting, additional mana allows Mages to use Destruction Potions, Molten Armor, and other raw DPS consumables instead of more mana-conservative alternatives.
 
-<img src="/figure2.png" />
+<img src="/figures/figure2.png" />
 
 Raids with shorter kill times were also more likely to give at least one Innervate to an Arcane Mage. This relationship is important because Innervate assignment is not random. Better-geared or better-performing raids tend to kill bosses faster and may also use available raid resources more deliberately. As raids gain gear and become more comfortable with encounter mechanics, they may also have less reason to reserve Innervate for healers or other defensive purposes (e.g. battle rez'd teammate)
 
@@ -27,36 +27,39 @@ These results should also not be interpreted in a vacuum. Giving an Innervate to
 ## Methods
 
 ### - Data Cleaning (Valid Logs)
-Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, resulting in 21,034 total Mage-encounter observations.
-
-<img src="/temporaruy.png" />
+2,500 Warcraft Logs reports from Serpentshrine Cavern (SSC) and Tempest Keep (TK) were filtered to eliminate duplicate logs and invalid non-SSC/TK encounters. Wipes and mages that died during the encounter were excluded to isolate full-encounter performance, alongside mages that did exactly 0 DPS. This resulted in 21,034 total Mage-encounter observations.
 
 ### - Exposure Definition (Valid Innervates)
 An Innervate was considered valid if it was cast before or during the encounter and at least 20 seconds before the encounter ended. Innervates were classified into three categories (0, 1, or 2+).
 
 ### - Statistical & Causal Modeling
-We estimated the causal effect of Innervate on Arcane Mage DPS using a Generalized Additive Model (GAM) fitted via mgcv::bam(). The model adjusted for variables that could act as confounders:
+We estimated the causal effect of Innervate on Arcane Mage DPS using a Gaussian Generalized Additive Model (GAM) with an identity link using mgcv::bam() and fast restricted maximum likelihood (fREML). The model adjusted for variables that could act as confounders:
 
-- <ins>**Encounter & Raid Factors**</ins>: Boss ID; fight duration (seconds); # of Druids in raid.
-- <ins>**Player Factors**</ins>: Difference between Mage-ilvl) and Raid-ilvl; Individual Performance(modeled via player-level as random effects).
+- <ins>**Encounter & Raid Factors**</ins>: Boss ID; fight duration (seconds); # of Druids in raid; `Vampiric Touch` mana gains.
+- <ins>**Player Factors**</ins>: Difference between Mage-ilvl and Raid-ilvl; Individual Performance (modeled via player-level as random effects); `Berserking` use.
 - <ins>**External Buffs**</ins>: Number of `Power Infusions` received; Uptime on `Moonkin Aura`
 - <ins>**Exposure Dynamics**</ins>: The effect of Innervate was modeled as a smooth interaction with fight duration to capture non-linear DPS returns across varying encounter lengths.
 
-The fitted model explained 92.8% of observed deviance ($R^2_{\mathrm{adj}} = 0.916$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and `Power Infusion` were statistically associated with DPS, whereas `Moonkin Aura` uptime was not (p=0.58).
+The fitted model explained 93% of observed deviance ($R^2_{\mathrm{adj}} = 0.918$). These covariates were selected according to their plausible causal role, rather than statistical significance. Among all the linear adjustment variables, Mage–raid item-level difference, number of Druids, and `Power Infusion` were statistically associated with DPS, whereas `Moonkin Aura` uptime was not (p=0.58).
 
 $$
 \mathrm{DPS}_i = \beta_0 + \beta_1 \mathrm{Innervate}_i + \boldsymbol{\beta X}_i + u_{\mathrm{Mage}[i]} + f_{\mathrm{Boss}[i]}(\mathrm{Duration}_i) + g(\mathrm{Duration}_i)\,\mathrm{Innervate}_i + \varepsilon_i
 $$
 
-Here, *i* represents one Mage–encounter observation. **β₀** is the baseline DPS; **β₁** is the average shift associated with receiving one Innervate; and **βXᵢ** represents the measured adjustment variables (gear difference, number of Druids, `Power Infusion`, `Moonkin Aura` uptime, and boss).
+Here, *i* represents one Mage–encounter observation. **β₀** is the baseline DPS; **β₁** is the average shift associated with receiving one Innervate; and **βXᵢ** represents the measured adjustment variables (gear difference, number of Druids, `Power Infusion`, `Moonkin Aura` uptime, `Vampiric Touch` mana gains, `Berserking` use, and boss).
 
-**u<sub>Mage[i]</sub>** accounts for persistent differences between individual Mages, **f<sub>Boss[i]</sub>(Durationᵢ)** allows the relationship between fight duration and DPS to differ by boss, and **g(Durationᵢ) × Innervateᵢ** allows the additional DPS from Innervate to change with fight duration. **εᵢ** is the remaining unexplained variation in DPS.
+**u<sub>Mage[i]</sub>** accounts for persistent differences between individual Mages.
+
+**f<sub>Boss[i]</sub>(Durationᵢ)** allows the relationship between fight duration and DPS to differ by boss.
+
+**g(Durationᵢ) × Innervateᵢ** allows the additional DPS from Innervate to change with fight duration. 
+
+**εᵢ** is the remaining unexplained variation in DPS.
 
 ### - Additional Variable Exploration
- 
-- `Berserking` was evaluated but excluded from the final model as it did not meaningfully improve model fit or change the effect estimate.
-- `Destruction Potion` use was excluded in the model because it may be a mechanism through which additional mana is converted into DPS (it is a result of). When tested as a sensitivity variable, it did not meaningfully improve model fit or change the effect estimate due to low number of observations.
-- Similarly, major sources of mana gains such as `Vampiric Touch` and `Judgment of Wisdom`, were treated primarily as sensitivity variables because they are part of the causal pathway that generates additional DPS with Innervate (more mana gains means proportionally more AB casts, which in turns will lead to more hits on target and more DPS).
+
+- `Destruction Potion` use was excluded in the model because it is a mechanism through which additional mana is converted into DPS (it is a result of).
+- `Judgment of Wisdom` was treated primarily as part of the sensitivity analysis because it is part of the causal pathway that generates additional DPS with Innervate (more mana gains means proportionally more AB casts, which in turns will lead to more hits on target).
 
 ### - Estimation
 From our model estimation counterfactual DPS outcomes were predicted for every encounter under two scenario conditions:
@@ -68,7 +71,7 @@ All other measured covariates were held at their observed values.
 
 The individual "exposure to Innervate" effect was calculated as $Y^{(1)} - Y^{(0)}$ or in other words "Scenario A minus Scenario B".
 
-To account for within-player correlation across multiple boss encounters and raid weeks, 95% confidence intervals were constructed using 1,000 clustered bootstrap iterations resampled at the player level.
+To account for within-player correlation across multiple boss encounters and raid weeks, 95% confidence intervals were constructed using 999 clustered bootstrap iterations resampled at the player level.
 
 ## Assumptions and limitations
 
@@ -76,6 +79,6 @@ Results generalize strictly to completed boss kills where the Mage survived the 
 
 Innervates casts differ in timing and are not really assigned at random. So even though we tried to account for player random effects in our model, as well as introducing additional uncertainty propagation with clustered bootstraping, there will always be some unemasured coordination that conditions that Innervate assignment. 
 
-Results could be a bit conservative, due to the assumption that fight duration does not "significantly decreases" when an Innervate is given to a Mage. In reality, the additional DPS will shorten the fight lenght, indirectly increasing DPS.  
+Results could be conservative, due to the assumption that fight duration does not "significantly changes" when an Innervate is given to a Mage. In reality, the additional DPS will shorten the fight length, indirectly increasing DPS.
 
-Finally, the analysis estimates the DPS benefit to the mage receiving the Innervate. Innervate is a limited raid resource, and assigning it to one player may prevent it from being assigned to another Mage, DPS player, or healer. The estimated DPS gain therefore should not be interpreted directly as the whole raid DPS gain or as evidence that a particular Innervate allocation is optimal for every raid.
+Finally, the analysis estimates the DPS benefit to the Mage receiving the Innervate. Innervate is a limited raid resource, and assigning it to one player may prevent it from being assigned to another Mage, DPS player, or healer. The estimated DPS gain therefore should not be interpreted directly as the whole raid DPS gain or as evidence that a particular Innervate allocation is optimal for every raid.

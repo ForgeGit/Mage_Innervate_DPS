@@ -1,0 +1,810 @@
+---
+title: "Process"
+date: "2026-08-10"
+output: html_document
+---
+
+# Settings
+
+```{r}
+library(showtext)
+library(ggtext)
+library(extrafont)
+
+font_add(family = "forgefooter", "forgefooter.ttf")
+# font_import()
+# n
+showtext_auto(TRUE)
+
+library(wclR)
+library(tidyverse)
+library(mgcv)
+```
+
+## - Theme
+
+```{r}
+scale_factor = 2.5
+vivax_theme <- function() {
+  theme_bw() +
+    
+    theme(axis.title.x = element_text(size = scale_factor * 13),
+          axis.title.y = element_text(size = scale_factor * 13),
+          
+          plot.title = element_markdown(face = "bold",
+                                        size = scale_factor * 16,
+                                        hjust = 0,
+                                        margin = margin(b = 2)),
+          
+          plot.subtitle = element_markdown(face="italic",
+                                           size = scale_factor * 12,
+                                           lineheight=0.4,
+                                           margin = margin(b = 0.5)),
+          # RIGHT TEXT (Caption)
+          plot.caption.position = "plot",
+          plot.caption = element_markdown(face = "italic",
+                                          hjust = 1, # Flush right
+                                          vjust = 0, # Anchored to the bottom
+                                          size = scale_factor * 8,
+                                          lineheight = 0.4,
+                                          # t=15 pushes the chart up to make room. 
+                                          # b=0 forces it to sit exactly on the bottom plot margin.
+                                          margin = margin(t = 3, b = 0, r = 5, unit = "pt")),
+          
+          # LEFT TEXT (Tag)
+          # c(0, 0) explicitly targets the absolute bottom-left corner of the image device.
+          plot.tag.position = c(0, 0), 
+          plot.tag = element_markdown(face = "italic",
+                                      hjust = 0, # Flush left
+                                      vjust = 0, # Anchored to the bottom
+                                      size = scale_factor * 8,
+                                      lineheight = 0.4,
+                                      # b=10 exactly matches the bottom plot.margin so it aligns perfectly with the caption baseline!
+                                      # l=10 exactly matches the left plot.margin so it aligns vertically with your title/axes.
+                                      margin = margin(b = 0, l = 10, unit = "pt")),
+          
+          legend.position = c(0.26, 0.8),
+          legend.spacing.x = unit(1, "pt"),
+          legend.spacing.y = unit(0.2, "pt"),
+          legend.direction="horizontal",
+          legend.box.just = "left",
+          legend.title = element_text(size=scale_factor*11,
+                                      lineheight=0.3, hjust = 0.5),
+          
+          legend.text = element_text(size = scale_factor * 8,
+                                     lineheight=0.3),
+          
+          #  legend.background = element_rect(fill = "transparent"),
+          axis.text = element_markdown(size= scale_factor * 10),
+          strip.text.x = element_text(size = scale_factor * 12,
+                                      lineheight = 0.3),
+          
+          legend.background = element_rect(fill = alpha('white', 0)),
+          
+          axis.text.x = element_markdown(size= scale_factor * 10,
+                                         hjust=0.5, face = "italic",
+                                         margin = margin(t = 0.5, unit = "pt")),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+    )
+}
+
+```
+
+## - Load
+```{r}
+df_events <- read_csv("../test/df_events_3.csv")
+
+df_events_deaths <- read_csv("../test/df_events_deaths.csv")
+
+df_parses <- read_csv("../test/df_parses.csv")
+
+df_fights <- read_csv("../test/df_fights.csv")
+
+df_players_detail <- read_csv("../test/df_players_detail.csv")
+
+df_events_buffs <- read_csv("../test/df_events_buffs.csv")
+```
+
+
+```{r}
+VALID_ENCOUNTERS <- c(100623, # Hydross the Unstable
+                      100624, # The Lurker Below
+                      100625, # Leotheras the Blind
+                      100626, # Fathom-Lord Karathress
+                      100627, # Morogrim Tidewalker
+                      100628, # Lady Vashj
+                      
+                      100730, # Al'ar 
+                      100731, # Void Reaver
+                      100732, # High Astromancer Solarian
+                      100733  # Kael'thas Sunstrider
+)
+```
+
+# DATA
+
+## - Kills
+
+```{r}
+df_fights_kills <- df_fights %>%
+  filter(kill==TRUE)
+
+rm(df_fights)
+
+df_fights_kills %>%
+  group_by()
+```
+
+## - Parses
+
+```{r}
+df_parses_minimal <- df_parses %>%
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                kill, duration_s,
+                role,actorID,name,
+                
+                class,spec,role_name,
+                rank,rankPercent,amount) %>%
+  
+  filter(!(fightID %in% c(10000,10001))) %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  filter(class=="Mage" & spec=="Arcane") 
+
+rm(df_parses)
+
+df_parses_minimal
+```
+
+## - Players & Deaths
+
+```{r}
+df_players_mages <- df_players_detail %>%
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                actorID,name,guid,
+                minItemLevel,maxItemLevel,
+                type,icon) %>%
+  dplyr::filter(type=="Mage" & icon=="Mage-Arcane")
+
+df_players_druid <- df_players_detail %>%
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                actorID,name,guid,
+                type,icon) %>%
+  dplyr::filter(type=="Druid") %>%
+  group_by(logID,fightID,encounterID,encounterName) %>%
+  summarise(NDruids=n()) %>%
+  ungroup()
+
+rm(df_players_detail)
+```
+
+
+```{r}
+df_mage_deaths <- df_events_deaths %>%
+  
+  filter(paste0(logID,fightID,targetID) %in% unique(paste0(df_players_mages$logID,df_players_mages$fightID,df_players_mages$actorID))) %>%
+  wcl_add_relative_time(.)
+
+df_mage_deaths %>%
+  group_by(logID,fightID,targetID)
+
+rm(df_events_deaths)
+```
+
+
+```{r}
+df_mage_deaths_clean <- df_players_mages %>%
+  left_join(df_mage_deaths %>%
+              group_by(logID,fightID,targetID) %>%
+              summarize(deaths=n()),
+            by=c("logID","fightID","actorID"="targetID"))
+```
+
+## - Events (Innervate)
+
+```{r}
+df_events %>%
+  group_by(type) %>%
+  summarize(n=n())
+```
+
+```{r}
+df_events %>%
+  filter(type %in% c("applybuff","cast")) %>%
+  group_by(logID,fightID,type) %>%
+  summarize(n=n()) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "type",values_from = "n") %>%
+  mutate(diff = applybuff-cast) %>%
+  filter(diff != 0)
+
+```
+
+```{r}
+df_mage_innervate <- df_events %>%
+  filter(type %in% c("removebuff")) %>%
+  filter(paste0(logID,fightID,targetID) %in% unique(paste0(df_players_mages$logID,df_players_mages$fightID,df_players_mages$actorID))
+  ) %>%
+  wcl_add_relative_time(.)
+
+rm(df_events)
+
+df_mage_innervate_clean <- df_players_mages %>%
+  left_join(df_mage_innervate %>%
+              group_by(logID,fightID,targetID) %>%
+              summarize(vates=n()),
+            by=c("logID","fightID","actorID"="targetID")) %>%
+  mutate(vates_cat = ifelse(is.na(vates),0,1)) %>%
+  mutate(vates_cat_2 = ifelse(vates_cat==0,"0",ifelse(vates>=2,"2+",1))) %>%
+  dplyr::select("logID","fightID","encounterID","encounterName","name","guid",
+                "class"="type","vates","vates_cat","vates_cat_2")
+```
+
+## - Events (Buffs)
+
+```{r}
+df_events_buffs_mages <- df_events_buffs %>%
+  filter(paste0(logID,fightID,targetID) %in% unique(paste0(df_players_mages$logID,df_players_mages$fightID,df_players_mages$actorID))
+  ) %>%
+  wcl_add_relative_time(.)
+
+rm(df_events_buffs)
+```
+
+
+```{r}
+df_events_mana_mages <- df_events_buffs_mages%>%
+  filter(type %in% c("resourcechange")) %>%
+  mutate(abilityGameName = case_when(abilityGameID == 27165 ~ "JoW",
+                                     abilityGameID == 34919 ~ "VT",
+                                     TRUE ~ as.character(abilityGameID)),
+         manaGain = resourceChange-waste) %>%
+  group_by(logID,fightID,actorID = targetID,abilityGameName) %>%
+  summarise(manaGain = sum(manaGain)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "abilityGameName", values_from = "manaGain") %>%
+  mutate(JoW = ifelse(is.na(JoW),0,JoW),
+         VT = ifelse(is.na(VT),0,VT))
+```
+
+
+```{r}
+df_events_buffs_mages_clean <- df_events_buffs_mages %>%
+  filter(type %in% c("applybuff")) %>%
+  filter(!(abilityGameID %in% c(
+    24907))) %>%
+  mutate(abilityGameName = case_when(#abilityGameID == 24907 ~ "MoonkinAura",
+    abilityGameID == 26635 ~ "Berserking",
+    abilityGameID == 10060 ~ "PowerInfusion",
+    abilityGameID == 28508 ~ "Destruction",
+    abilityGameID %in% c(32182,2825) ~ "Lust",
+    TRUE ~ as.character(abilityGameID))) %>%
+  group_by(logID,fightID,actorID = targetID,abilityGameName) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "abilityGameName", values_from = "n") %>%
+  mutate(Berserking = ifelse(is.na(Berserking),0,1),
+         PowerInfusion = ifelse(is.na(PowerInfusion),0,PowerInfusion),
+         Destruction = ifelse(is.na(Destruction),0,Destruction))
+```
+
+```{r}
+df_events_moonkin_mages <- df_events_buffs_mages %>%
+  filter(abilityGameID==24907) %>%
+  wcl_aura_uptime(ability_ids = 24907)
+
+
+df_events_moonkin_mages
+```
+
+
+
+## - Gen Full
+
+```{r}
+df_full <- df_fights_kills %>% 
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                kill,duration,duration_s,
+                averageItemLevel)
+
+df_full <- wcl_distinct_fights(
+  df_full %>%
+    mutate(duration_f = round(duration_s)),
+  by = c(
+    "encounterID", "difficulty",
+    "size", "kill",
+    "duration_f",
+    "averageItemLevel")
+) %>%
+  left_join(df_parses_minimal,
+            by=c("logID","fightID",
+                 "encounterID","encounterName",
+                 "kill","duration_s")
+  )
+
+
+df_full_curated <- df_full %>%
+  
+  left_join(df_mage_deaths_clean %>% 
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","encounterID","encounterName","name","class"="type")) %>%
+  left_join(df_mage_innervate_clean %>% 
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","encounterID","encounterName","name","guid","class")) %>%
+  
+  left_join(df_events_mana_mages %>%
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","actorID.y" = "actorID"))%>%
+  left_join(df_events_buffs_mages_clean %>%
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","actorID.y" = "actorID"))%>%
+  left_join(df_events_moonkin_mages %>%
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","encounterID","encounterName",
+                 "actorID.y" = "targetID")) %>%
+  mutate(uptime_pct = ifelse(is.na(uptime_pct),0,uptime_pct)) %>%
+  
+  left_join(df_players_druid %>%
+              dplyr::filter(!duplicated(.)),
+            by=c("logID","fightID","encounterID","encounterName")) %>%
+  
+  
+  filter(is.na(deaths)) %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  filter(logID != "pfQALavGTBzngxXq") %>% ## OOPS
+  
+  filter(!is.na(guid)) %>% ## Controls for parses additional we have (duplicated)
+  filter(!is.na(role)) %>% ## TO FIX TEMPORARY WHILE DOWNLOADING
+  filter(!is.na(VT)) %>% ## TO FIX TEMPORARY WHILE DOWNLOADING
+  filter(!is.na(Lust)) %>% ## TO FIX TEMPORARY WHILE DOWNLOADING
+  
+  filter(amount!=0)
+
+
+df_full_curated %>% dplyr::select(logID) %>% unique(.)
+df_full_curated %>% dplyr::select(logID,encounterName) %>% unique(.)
+df_full_curated %>% dplyr::select(guid,name) %>% unique(.)
+```
+
+
+```{r}
+df_full_curated <- df_full_curated %>%
+  dplyr::distinct(encounterID, size, duration_f, name, .keep_all = TRUE)
+
+```
+
+
+## - Gen df clean
+```{r}
+df <- df_full_curated %>%
+  
+  mutate(mage = factor(actorID.x),
+         boss = factor(encounterID),
+         log = factor(logID),
+         
+         # Ordinary factor for the mean differences
+         vates = factor(
+           vates_cat_2,
+           levels = c("0", "1","2+")
+         ),
+         
+         # Ordered copy used ONLY for the duration interaction.
+         # This makes 0 the reference curve.
+         vates_by = ordered(
+           vates_cat_2,
+           levels = c("0", "1","2+")
+         )
+  ) %>%
+  
+  rename(raidilvl = averageItemLevel,
+         mageilvl = minItemLevel) %>%
+  mutate(ilvldiff = mageilvl - raidilvl)
+
+df <- df %>%
+  dplyr::select(logID,amount,vates,ilvldiff,NDruids,PowerInfusion,uptime_pct,boss,mage,duration_s,vates_by,
+                Berserking, Destruction,VT,JoW)
+
+
+write_csv(df,"./data/df_analysis.csv")
+```
+
+
+```{r}
+df_full_curated %>%
+  group_by(logID, encounterName) %>%
+  summarise(mean=mean(duration_s))%>%
+  group_by(encounterName) %>%
+  summarise(mean=mean(mean))
+```
+
+```{r}
+CURATED_LOGS <- df_full_curated %>%
+  group_by(logID) %>%
+  summarize(n=n())
+
+CURATED_LOGS_FIGHTS <- df_full_curated %>%
+  group_by(logID,fightID) %>%
+  summarize(n=n()) %>%
+  ungroup() %>%
+  mutate(LogUUID = paste0(logID,fightID))
+
+
+df_players_detail %>%
+  filter(paste0(logID,fightID) %in% CURATED_LOGS_FIGHTS$LogUUID) %>%
+  filter(type %in% c("Druid", "Mage")) %>%
+  group_by(type) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n / sum(n) * 100)
+
+df_players_detail %>%
+  filter(paste0(logID,fightID) %in% CURATED_LOGS_FIGHTS$LogUUID) %>%
+  # filter(type %in% c("Druid", "Mage")) %>%
+  group_by(logID,encounterName,type) %>%
+  summarise(n = n()) %>%
+  group_by(type) %>%
+  summarise(n = mean(n))
+```
+
+
+```{r}
+df_events %>%
+  filter(logID %in% CURATED_LOGS$logID) %>%
+  filter(type == "removebuff") %>%
+  dplyr::select(logID,fightID,encounterName,sourceID,targetID) %>%
+  full_join(df_players_mages %>%
+              dplyr::select(logID,fightID,encounterName,actorID,icon),
+            by=c("logID","fightID","encounterName",
+                 "targetID" = "actorID")) %>%
+  group_by(icon) %>%
+  summarize(n=n()) %>%
+  mutate(pct = n / sum(n) * 100)
+```
+
+```{r}
+df_full_curated %>%
+  group_by(name) %>%
+  summarise(sum=sum(vates,na.rm=T),
+            max = max(vates,na.rm=T)) %>%
+  arrange(desc(sum)) %>%
+  group_by(sum)  %>%
+  summarize(n=n()) %>%
+  mutate(pct = n / sum(n) * 100)
+# ggplot() +
+# geom_histogram(aes(x=sum))
+
+df_full_curated %>%
+  group_by(name) %>%
+  summarise(sum=sum(vates,na.rm=T),
+            max = max(vates,na.rm=T)) %>%
+  arrange(desc(sum))
+```
+
+
+
+## - Diagnostic plot 2
+
+```{r}
+## Diagnostics
+
+plot2 <- df %>%
+  filter(vates %in% c("0", "1")) %>%
+  ggplot(
+    aes(
+      x = duration_s,
+      fill = vates
+    )
+  ) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ encounterName, scales = "free_x") +
+  vivax_theme()
+
+
+```
+
+```{r}
+boss_order <- c(
+  # SSC
+  "Hydross\nthe Unstable",
+  "The Lurker\nBelow",
+  "Leotheras\nthe Blind",
+  "Fathom-Lord\nKarathress",
+  "Morogrim\nTidewalker",
+  "Lady\nVashj",
+  
+  # TK
+  "Al'ar",
+  "Void\nReaver",
+  "High Astromancer\nSolarian",
+  "Kael'thas\nSunstrider"
+)
+
+plot2_data <- df %>%
+  filter(vates_cat %in% c(0, 1)) %>%
+  
+  mutate(encounterName = case_when(
+    encounterName=="Hydross the Unstable" ~ "Hydross\nthe Unstable",
+    encounterName=="The Lurker Below" ~ "The Lurker\nBelow",
+    encounterName=="Leotheras the Blind" ~ "Leotheras\nthe Blind",
+    encounterName=="Morogrim Tidewalker" ~ "Morogrim\nTidewalker",
+    encounterName=="Lady Vashj" ~ "Lady\nVashj",
+    encounterName=="Kael'thas Sunstrider" ~ "Kael'thas\nSunstrider",
+    encounterName=="Void Reaver" ~ "Void\nReaver",
+    
+    encounterName=="High Astromancer Solarian" ~ "High Astromancer\nSolarian",
+    encounterName=="Fathom-Lord Karathress" ~ "Fathom-Lord\nKarathress",
+    TRUE ~ encounterName)) %>%
+  mutate(
+    encounterName = factor(
+      encounterName,
+      levels = boss_order
+    ),
+    duration_m = duration_s / 60,
+    vates_cat = factor(vates_cat)
+  )
+```
+
+
+```{r}
+df_mage_innervate_timing <- df_players_mages %>%
+  left_join(df_mage_innervate %>%
+              group_by(logID,fightID,targetID,encounterName) %>%
+              summarize(time_since_fight_start=min(time_since_fight_start)),
+            by=c("logID","fightID","encounterName","actorID"="targetID")) %>%
+  left_join(df_fights_kills,
+            by=c("logID","fightID","encounterName"))
+
+
+plot2_data_timing <- df_mage_innervate_timing %>%
+  
+  mutate(encounterName = case_when(
+    encounterName=="Hydross the Unstable" ~ "Hydross\nthe Unstable",
+    encounterName=="The Lurker Below" ~ "The Lurker\nBelow",
+    encounterName=="Leotheras the Blind" ~ "Leotheras\nthe Blind",
+    encounterName=="Morogrim Tidewalker" ~ "Morogrim\nTidewalker",
+    encounterName=="Lady Vashj" ~ "Lady\nVashj",
+    encounterName=="Kael'thas Sunstrider" ~ "Kael'thas\nSunstrider",
+    encounterName=="Void Reaver" ~ "Void\nReaver",
+    
+    encounterName=="High Astromancer Solarian" ~ "High Astromancer\nSolarian",
+    encounterName=="Fathom-Lord Karathress" ~ "Fathom-Lord\nKarathress",
+    TRUE ~ encounterName)) %>%
+  mutate(
+    encounterName = factor(
+      encounterName,
+      levels = boss_order
+    ),
+    time_since_fight_start_m = time_since_fight_start / 60,
+    duration_m = duration_s / 60)
+```
+
+```{r}
+plot2 <- plot2_data %>%
+  ggplot(
+    aes(x = duration_m,
+        fill = vates_cat, colour = vates_cat
+    )
+  ) +
+  
+  # Single large diagonal background watermark
+  # ggplot2::annotate("text",
+  #                   x = 325, y = 140,                        # Centered relative to xlim (0-650) and ylim (-20-300)
+  #                   label =  paste0(rep("WORK-IN-PROGRESS WORK-IN-PROGRESS WORK-IN-PROGRESS\n",10),collapse=""),
+  #                   color = "gray75", alpha = 0.25,
+  #                   size = 28, fontface = "bold", angle = 30,
+  #                   lineheight = 0.3) +
+  
+  geom_density(aes(y = after_stat(count)),
+               alpha = 0.28,
+               linewidth = 0.8,adjust = 1
+  ) +
+  
+  facet_wrap( ~ encounterName,
+              scales = "free_x",ncol = 6
+  ) +
+  
+  scale_fill_manual(
+    values = c("0" = "#666666",
+               "1" = "#04007B"),
+    labels = c("0" = "No\nInnervate", 
+               "1" = "At Least One\nInnervate on DPS"), 
+    name = NULL) +
+  
+  scale_colour_manual(
+    values = c("0" = "#666666",
+               "1" = "#04007B" ),
+    labels = c("0" = "No\nInnervate",
+               "1" = "At Least One\nInnervate on DPS" ),
+    name = NULL
+  ) +
+  
+  scale_x_continuous(
+    breaks = scales::breaks_pretty(n = 4.5),
+    labels = function(x) {  
+      mins <- floor(x)
+      secs <- round((x - mins) * 60)
+      sprintf("%d:%02d", mins, secs)
+    }) +
+  
+  labs(
+    x = "Fight duration (minutes)",
+    y = "Observations",
+    
+    title =
+      "Fight duration by boss and <b><span style='color:#04007B;'>Innervate use on DPS (Arcane Mage)</span></b>",
+    
+    subtitle = paste0("1,650 Logs containing 9,501 Encounters. Raiding weeks 24-25 of TBC Fresh: Phase 2 SSC & TK<br>",
+                      "This figure is INFORMATIVE and meant to be used as context for the MAIN ANALYSIS. <br>",
+                      "Do NOT assign Innervate based on this figure alone.",
+                      "Please check <span style='font-family:forgefooter'>&#xe901;</span> below."),
+    
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; ",
+      "discord.gg&#47;wp55kqmyYG\u00A0&bull; &nbsp;Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> ",
+      "https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 14/08/2026 (dd/mm/yyyy) 01:00 UTC"
+    )
+  ) +
+  
+  # coord_cartesian(clip="off") + 
+  vivax_theme() +
+  
+  theme(
+    # coord_cartesian(clip = "off"),
+    legend.position = "inside",
+    legend.position.inside = c(0.82, 0.25), # Positioned over the empty panels (bottom-right of grid)
+    legend.direction = "vertical",
+    legend.justification = c("center", "center"),
+    
+    legend.key.width = grid::unit(1, "cm"),
+    
+    legend.text = element_text(size = scale_factor * 11,
+                               lineheight=0.3),
+    
+    legend.spacing.y = grid::unit(0.6, "cm"),      # Distance between legend items
+    legend.key.spacing.y = grid::unit(0.6, "cm"),    
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_markdown(angle = 30,hjust=1)
+  )
+```
+
+
+```{r}
+ggsave(paste0("./figure2_latest.png"), plot2, 
+       width = 8, height = 5, units="in", dpi=300, 
+       device = "png")
+```
+
+```{r, fig.width=7, fig.height=4, fig.dpi=300}
+plot2
+```
+
+
+```{r}
+plot <- magick::image_read("figure2_latest.png")
+target_width <- round(2400 * 0.1)
+
+button_img <- magick::image_read("button_magecord.png",paste0(target_width))
+
+
+button_img_scaled <- magick::image_scale(button_img, paste0(target_width))
+
+# Composite the button centered near the bottom (adjust offset +0+Y for vertical depth)
+final_img <- magick::image_composite(
+  plot, 
+  button_img_scaled, 
+  operator = "Over", 
+  gravity = "northeast", 
+  offset = "+180+60"
+)
+
+# Save the resulting composite
+magick::image_write(final_img, "./final_figure2_FinalModel.png")
+```
+
+
+### * Subplot 2
+
+```{r}
+plot2b <- plot2_data_timing %>%
+  ggplot(
+    aes(x = time_since_fight_start_m , y = duration_m)
+  ) +
+  
+  geom_point(size=0.1 ) +
+  geom_smooth(aes(x= time_since_fight_start_m, y=duration_m),method = "gam") +
+  
+  facet_wrap( ~ encounterName,
+              scales = "free_x",ncol = 6
+  ) +
+  
+  geom_vline(xintercept = 0.3333333) + 
+  
+  scale_y_continuous(
+    breaks = scales::breaks_pretty(n = 5),
+    labels = function(x) {  
+      mins <- floor(x)
+      secs <- round((x - mins) * 60)
+      sprintf("%d:%02d", mins, secs)
+    }) +
+  
+  scale_x_continuous(
+    breaks = scales::breaks_pretty(n = 4),
+    labels = function(x) {  
+      mins <- floor(x)
+      secs <- round((x - mins) * 60)
+      sprintf("%d:%02d", mins, secs)
+    }) +
+  
+  labs(
+    x = "Fight duration (minutes)",
+    y = "",
+    
+    title =
+      "Fight duration by boss and <b><span style='color:#04007B;'>Innervate use on Mage</span></b>",
+    
+    subtitle =
+      "Logs = ",
+    
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; ",
+      "discord.gg/wp55kqmyYG Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> ",
+      "https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )
+  ) +
+  # coord_cartesian(xlim = c(0,0.75)) +
+  
+  vivax_theme() +
+  
+  theme(
+    # Legend BELOW plotting panels
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    
+    legend.key.width = grid::unit(1, "cm")
+  )
+```
+
+
+
+```{r}
+ggsave(paste0("./figure_latest_2b.png"), plot2b, 
+       width = 8, height = 4.5, units="in", dpi=300, 
+       device = "png")
+```
+
+```{r, fig.width=7, fig.height=4, fig.dpi=300}
+plot2b
+```
+
+## - ??
+
+```{r}
+mage_variation <- df %>%
+  filter(vates %in% c("0", "1")) %>%
+  group_by(mage) %>%
+  summarise(
+    n_fights = n(),
+    n_vates_levels = n_distinct(vates),
+    has_0 = any(vates == "0"),
+    has_1 = any(vates == "1"),
+    .groups = "drop"
+  )
+
+table(mage_variation$has_0 & mage_variation$has_1)
+
+mean(mage_variation$has_0 & mage_variation$has_1)
+```

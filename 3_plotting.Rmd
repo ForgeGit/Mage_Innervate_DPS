@@ -1,0 +1,1895 @@
+---
+title: "3_plotting"
+date: "2026-08-15"
+output: html_document
+---
+# CAUSAL PRED
+
+
+## - Theme
+
+```{r}
+scale_factor = 2.5
+vivax_theme <- function() {
+  theme_bw() +
+    
+    theme(axis.title.x = element_text(size = scale_factor * 13),
+          axis.title.y = element_text(size = scale_factor * 13),
+          
+          plot.title = element_markdown(face = "bold",
+                                        size = scale_factor * 16,
+                                        hjust = 0,
+                                        margin = margin(b = 2)),
+          
+          plot.subtitle = element_markdown(face="italic",
+                                           size = scale_factor * 12,
+                                           lineheight=0.4,
+                                           margin = margin(b = 0.5)),
+          # RIGHT TEXT (Caption)
+          plot.caption.position = "plot",
+          plot.caption = element_markdown(face = "italic",
+                                          hjust = 1, # Flush right
+                                          vjust = 0, # Anchored to the bottom
+                                          size = scale_factor * 8,
+                                          lineheight = 0.4,
+                                          # t=15 pushes the chart up to make room. 
+                                          # b=0 forces it to sit exactly on the bottom plot margin.
+                                          margin = margin(t = 3, b = 0, r = 5, unit = "pt")),
+          
+          # LEFT TEXT (Tag)
+          # c(0, 0) explicitly targets the absolute bottom-left corner of the image device.
+          plot.tag.position = c(0, 0), 
+          plot.tag = element_markdown(face = "italic",
+                                      hjust = 0, # Flush left
+                                      vjust = 0, # Anchored to the bottom
+                                      size = scale_factor * 8,
+                                      lineheight = 0.4,
+                                      # b=10 exactly matches the bottom plot.margin so it aligns perfectly with the caption baseline!
+                                      # l=10 exactly matches the left plot.margin so it aligns vertically with your title/axes.
+                                      margin = margin(b = 0, l = 10, unit = "pt")),
+          
+          # plot.caption.position = "plot",
+          # plot.caption = element_markdown(face = "italic",
+          #                                 hjust = 0,
+          #                                 vjust=1,
+          #                                 size = scale_factor * 8,
+          #                                 lineheight=0.4,
+          #                                 margin = margin(t = 5, unit = "pt")),
+          
+          # plot.tag.position = "plot",
+          # plot.tag = element_markdown(face = "italic",
+          #                             hjust = 0, # Aligned to the left edge
+          #                             vjust = 1,
+          #                             size = scale_factor * 8,
+          #                             lineheight = 0.4,
+          #                             margin = margin(t = 5, unit = "pt")),
+          
+          legend.position = c(0.26, 0.8),
+          legend.spacing.x = unit(1, "pt"),
+          legend.spacing.y = unit(0.2, "pt"),
+          legend.direction="horizontal",
+          legend.box.just = "left",
+          legend.title = element_text(size=scale_factor*11,
+                                      lineheight=0.3, hjust = 0.5),
+          
+          legend.text = element_text(size = scale_factor * 8,
+                                     lineheight=0.3),
+          
+          #  legend.background = element_rect(fill = "transparent"),
+          axis.text = element_markdown(size= scale_factor * 10),
+          strip.text.x = element_text(size = scale_factor * 12,
+                                      lineheight = 0.3),
+          
+          legend.background = element_rect(fill = alpha('white', 0)),
+          
+          axis.text.x = element_markdown(size= scale_factor * 10,
+                                         hjust=0.5, face = "italic",
+                                         margin = margin(t = 0.5, unit = "pt")),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+    )
+}
+
+```
+
+
+## - Plot Final Model
+
+```{r}
+d0 <- df
+d1 <- df
+
+d0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+d1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+d0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+d1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+pred0 <- predict(fit_final_model, newdata = d0, type = "response")
+pred1 <- predict(fit_final_model, newdata = d1, type = "response")
+
+df$innervate_gain <- pred1 - pred0
+
+mean(df$innervate_gain,na.rm=T)
+
+```
+
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_final_model, newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_final_model, newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_final_model))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_final_model)
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+```{r}
+df_sim_points <- data.frame(
+  guide_source = factor(c("Wowhead Reference\n(117 DPS)", 
+                          "Icy Veins Reference\n(110 DPS)"), 
+                        levels = c("Wowhead Reference\n(117 DPS)", 
+                                   "Icy Veins Reference\n(110 DPS)")),
+  x = c(120, 180),
+  xmin = c(110, 150),
+  xmax = c(130, 210),
+  y = c(117, 110),
+  pt_color = c("#A41919", "#0095C3"),
+  pt_shape = c(2, 8)
+)
+```
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # Single large diagonal background watermark
+  # ggplot2::annotate("text",
+  #                   x = 325, y = 140,                        # Centered relative to xlim (0-650) and ylim (-20-300)
+  #                   label =  paste0(rep("WORK-IN-PROGRESS WORK-IN-PROGRESS WORK-IN-PROGRESS\n",10),collapse=""),
+  #                   color = "gray75", alpha = 0.25,
+  #                   size = 28, fontface = "bold", angle = 30,
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18, fill="#04007B")  +
+  
+  # Point 1: Y = 117, X = 120 +/- 10 (Wowhead)
+  ggplot2::annotate("errorbarh", xmin = 110, xmax =130, y = 117, color = "#A41919", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 120, y = 117, color = "#A41919", shape = 2, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 67, y = 101, 
+    label = "Wowhead\nReference\n(117 DPS)", 
+    color = "#A41919", fontface = "bold", size = 7, vjust = 0, lineheight = 0.25
+  ) +
+  
+  # Point 2: Y = 110, X = 180 +/- 30 (Icy Veins)
+  ggplot2::annotate("errorbarh", xmin = 150, xmax = 210, y = 110, color = "#0095C3", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 180, y = 110, color = "#0095C3", shape = 8, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 185, y = 98, 
+    label = "Icy Veins\nReference\n(110 DPS)", 
+    color = "#0095C3", fontface = "bold", size = 7, vjust = 1, lineheight = 0.25
+  ) +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.01, color="black")+
+  
+  # --- ENCOUNTER DURATION MARKERS ---
+  
+  # 1. Shortest: 99th Pct Karathress (47s)
+  ggplot2::annotate("segment", x = 134, xend = 134, y = -20, yend = 15,
+                    color = "#5E35B1", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 134-5, y = 5,
+                    label = "Shortest Avg Encounter\nHigh Astromancer Solarian\n(~2m 20s)",
+                    color = "#5E35B1",  alpha=0.75, size = 5, fontface = "bold", vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 2. Average Encounter Duration (200s)
+  ggplot2::annotate("segment", x = 262, xend = 262, y = -20, yend = 15,
+                    color = "grey30", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 262-5, y = 5,
+                    label = "Avg Mean Encounter\n(~4m 20s)",
+                    color = "grey30",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 3. Longest 99th Pct: Kael/Vashj (~370s; using 370 as a middle ground for 6:07 and 6:13)
+  ggplot2::annotate("segment", x = 495, xend = 495, y = -20, yend = 15,
+                    color = "#2E7D32", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 495-5, y = 5,
+                    label = "Longest Avg Encounter\nKael'thas Sunstrider\n(~8m 15s)",
+                    color = "#2E7D32",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # ----------------------------------
+
+ggplot2::annotate(
+  "label", x = 410, y = 240,
+  label = ate_label_text,
+  fill = "#F4F4F9", color = "#04007B", 
+  fontface = "bold", size = scale_factor*4.5, 
+  linewidth = 0.5, lineheight = .4
+) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,300)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on <b><span style='color:#3FC7EB;'>Arcane Mage</span></b> DPS<img src='https://wow.zamimg.com/images/wow/icons/large/spell_holy_magicalsentry.jpg' width='11' height='11' style='vertical-align:middle;'/>",
+    subtitle = "1,650 Logs containing 9,501 Encounters. Raiding weeks 24-25 of TBC Fresh: Phase 2 SSC & TK<br>Methodology accounts for player, raid, external buffs, and encounter factors. Shaded region: 95% CI.",
+    
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG\u00A0&bull; &nbsp;Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 14/08/2026 (dd/mm/yyyy) 01:00 UTC"
+    ))+
+  
+  vivax_theme() +
+  
+  # Position legend in bottom-left inside plot (above Y=0)
+  theme(
+    legend.position = c(0.17, 0.19),           # Relative (x, y) coordinates within plot space
+    legend.direction = "vertical",             # Vertical orientation
+    legend.margin = margin(t = 4, r = 6, b = 4, l = 6)
+  )
+```
+
+```{r}
+ggsave(paste0("./figure1.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+```{r}
+plot <- magick::image_read("figure1.png")
+target_width <- round(2100 * 0.1)
+
+button_img <- magick::image_read("button_magecord.png",paste0(target_width))
+
+
+button_img_scaled <- magick::image_scale(button_img, paste0(target_width))
+
+# Composite the button centered near the bottom (adjust offset +0+Y for vertical
+# depth)
+final_img <- magick::image_composite(
+  plot, 
+  button_img_scaled, 
+  operator = "Over", 
+  gravity = "South", 
+  offset = "+45+15"
+)
+
+# Save the resulting composite
+magick::image_write(final_img, "./figure1.png")
+```
+
+
+##  - Plots All
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit, newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit, newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit)
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18,fill="#04007B") +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # Reference: 
+  geom_vline(xintercept = 180,
+             linetype = "solid", linewidth = 0.6) +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.05, color="black")+
+  
+  ggplot2::annotate(
+    "label", x = 510, y = 240,
+    label = ate_label_text,
+    fill = "#F4F4F9", color = "#04007B", 
+    fontface = "bold", size = scale_factor*3.5, 
+    linewidth = 0.5, lineheight = .4
+  ) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,320)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on <b><span style='color:#3FC7EB;'>Arcane Mage</span></b> DPS",
+    subtitle = "Solid line: estimated difference in DPS; shaded region: 95% confidence interval.",
+    # Map the LEFT side text to the 'tag'
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG - Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    # Map the RIGHT side text to the 'caption'
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )
+  ) +
+  
+  # theme_classic(base_size = 12) +
+  vivax_theme() 
+
+```
+
+```{r}
+ggsave(paste0("./figure1_allcovars.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+##  - Plots Conservative
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_conservative , newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_conservative , newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_conservative ))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_conservative )
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18,fill="#04007B") +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # Reference: 
+  geom_vline(xintercept = 180,
+             linetype = "solid", linewidth = 0.6) +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.05, color="black")+
+  
+  ggplot2::annotate(
+    "label", x = 510, y = 240,
+    label = ate_label_text,
+    fill = "#F4F4F9", color = "#04007B", 
+    fontface = "bold", size = scale_factor*3.5, 
+    linewidth = 0.5, lineheight = .4
+  ) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,320)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on Arcane Mage DPS",
+    subtitle = "Solid line: estimated difference in DPS; shaded region: 95% confidence interval.",
+    # Map the LEFT side text to the 'tag'
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG - Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    # Map the RIGHT side text to the 'caption'
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )) + 
+  vivax_theme() 
+```
+
+```{r}
+ggsave(paste0("./figure1_conservative.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+##  - Plots Adjusted
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_adjusted , newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_adjusted , newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_adjusted ))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_adjusted )
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18,fill="#04007B") +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # Reference: 
+  geom_vline(xintercept = 180,
+             linetype = "solid", linewidth = 0.6) +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.05, color="black")+
+  
+  ggplot2::annotate(
+    "label", x = 510, y = 240,
+    label = ate_label_text,
+    fill = "#F4F4F9", color = "#04007B", 
+    fontface = "bold", size = scale_factor*3.5, 
+    linewidth = 0.5, lineheight = .4
+  ) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,320)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on Arcane Mage DPS",
+    subtitle = "Solid line: estimated difference in DPS; shaded region: 95% confidence interval.",
+    # Map the LEFT side text to the 'tag'
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG - Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    # Map the RIGHT side text to the 'caption'
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )
+  ) +
+    vivax_theme() 
+
+```
+
+```{r}
+ggsave(paste0("./figure1_adjusted.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+##  - Plots Sensitivity
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_sensitivity , newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_sensitivity , newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_sensitivity ))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_sensitivity )
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18,fill="#04007B") +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # Reference: 
+  geom_vline(xintercept = 180,
+             linetype = "solid", linewidth = 0.6) +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.05, color="black")+
+  
+  ggplot2::annotate(
+    "label", x = 510, y = 240,
+    label = ate_label_text,
+    fill = "#F4F4F9", color = "#04007B", 
+    fontface = "bold", size = scale_factor*3.5, 
+    linewidth = 0.5, lineheight = .4
+  ) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,320)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on Arcane Mage DPS",
+    subtitle = "Solid line: estimated difference in DPS; shaded region: 95% confidence interval.",
+    # Map the LEFT side text to the 'tag'
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG - Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    # Map the RIGHT side text to the 'caption'
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )
+  ) +
+  
+  # theme_classic(base_size = 12) +
+  vivax_theme() 
+
+```
+
+```{r}
+ggsave(paste0("./figure1_manasensitivity.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+
+## - Plot Final Model v2
+
+```{r}
+d0 <- df
+d1 <- df
+
+d0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+d1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+d0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+d1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+pred0 <- predict(fit_final_model_2, newdata = d0, type = "response")
+pred1 <- predict(fit_final_model_2, newdata = d1, type = "response")
+
+df$innervate_gain <- pred1 - pred0
+
+mean(df$innervate_gain,na.rm=T)
+
+```
+
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_final_model_2, newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_final_model_2, newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_final_model_2))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_final_model_2)
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+```{r}
+df_sim_points <- data.frame(
+  guide_source = factor(c("Wowhead Reference\n(117 DPS)", 
+                          "Icy Veins Reference\n(110 DPS)"), 
+                        levels = c("Wowhead Reference\n(117 DPS)", 
+                                   "Icy Veins Reference\n(110 DPS)")),
+  x = c(120, 180),
+  xmin = c(110, 150),
+  xmax = c(130, 210),
+  y = c(117, 110),
+  pt_color = c("#A41919", "#0095C3"),
+  pt_shape = c(2, 8)
+)
+```
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # Single large diagonal background watermark
+  # ggplot2::annotate("text",
+  #                   x = 325, y = 140,                        # Centered relative to xlim (0-650) and ylim (-20-300)
+  #                   label =  paste0(rep("WORK-IN-PROGRESS WORK-IN-PROGRESS WORK-IN-PROGRESS\n",10),collapse=""),
+  #                   color = "gray75", alpha = 0.25,
+  #                   size = 28, fontface = "bold", angle = 30,
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18, fill="#04007B")  +
+  
+  # Point 1: Y = 117, X = 120 +/- 10 (Wowhead)
+  ggplot2::annotate("errorbarh", xmin = 110, xmax =130, y = 117, color = "#A41919", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 120, y = 117, color = "#A41919", shape = 2, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 67, y = 101, 
+    label = "Wowhead\nReference\n(117 DPS)", 
+    color = "#A41919", fontface = "bold", size = 7, vjust = 0, lineheight = 0.25
+  ) +
+  
+  # Point 2: Y = 110, X = 180 +/- 30 (Icy Veins)
+  ggplot2::annotate("errorbarh", xmin = 150, xmax = 210, y = 110, color = "#0095C3", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 180, y = 110, color = "#0095C3", shape = 8, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 185, y = 98, 
+    label = "Icy Veins\nReference\n(110 DPS)", 
+    color = "#0095C3", fontface = "bold", size = 7, vjust = 1, lineheight = 0.25
+  ) +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.01, color="black")+
+  
+  # --- ENCOUNTER DURATION MARKERS ---
+  
+  # 1. Shortest: 99th Pct Karathress (47s)
+  ggplot2::annotate("segment", x = 134, xend = 134, y = -20, yend = 15,
+                    color = "#5E35B1", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 134-5, y = 5,
+                    label = "Shortest Avg Encounter\nHigh Astromancer Solarian\n(~2m 20s)",
+                    color = "#5E35B1",  alpha=0.75, size = 5, fontface = "bold", vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 2. Average Encounter Duration (200s)
+  ggplot2::annotate("segment", x = 262, xend = 262, y = -20, yend = 15,
+                    color = "grey30", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 262-5, y = 5,
+                    label = "Avg Mean Encounter\n(~4m 20s)",
+                    color = "grey30",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 3. Longest 99th Pct: Kael/Vashj (~370s; using 370 as a middle ground for 6:07 and 6:13)
+  ggplot2::annotate("segment", x = 495, xend = 495, y = -20, yend = 15,
+                    color = "#2E7D32", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 495-5, y = 5,
+                    label = "Longest Avg Encounter\nKael'thas Sunstrider\n(~8m 15s)",
+                    color = "#2E7D32",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # ----------------------------------
+
+ggplot2::annotate(
+  "label", x = 410, y = 240,
+  label = ate_label_text,
+  fill = "#F4F4F9", color = "#04007B", 
+  fontface = "bold", size = scale_factor*4.5, 
+  linewidth = 0.5, lineheight = .4
+) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,300)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on <b><span style='color:#3FC7EB;'>Arcane Mage</span></b> DPS<img src='https://wow.zamimg.com/images/wow/icons/large/spell_holy_magicalsentry.jpg' width='11' height='11' style='vertical-align:middle;'/>",
+    subtitle = "1,650 Logs containing 9,501 Encounters. Raiding weeks 24-25 of TBC Fresh: Phase 2 SSC & TK<br>Methodology accounts for player, raid, external buffs, and encounter factors. Shaded region: 95% CI.",
+    
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG\u00A0&bull; &nbsp;Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 14/08/2026 (dd/mm/yyyy) 01:00 UTC"
+    ))+
+  
+  vivax_theme() +
+  
+  # Position legend in bottom-left inside plot (above Y=0)
+  theme(
+    legend.position = c(0.17, 0.19),           # Relative (x, y) coordinates within plot space
+    legend.direction = "vertical",             # Vertical orientation
+    legend.margin = margin(t = 4, r = 6, b = 4, l = 6)
+  )
+```
+
+```{r}
+ggsave(paste0("./figure1_v2.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+```{r}
+plot <- magick::image_read("figure1_v2.png")
+target_width <- round(2100 * 0.1)
+
+button_img <- magick::image_read("button_magecord.png",paste0(target_width))
+
+
+button_img_scaled <- magick::image_scale(button_img, paste0(target_width))
+
+# Composite the button centered near the bottom (adjust offset +0+Y for vertical
+# depth)
+final_img <- magick::image_composite(
+  plot, 
+  button_img_scaled, 
+  operator = "Over", 
+  gravity = "South", 
+  offset = "+45+15"
+)
+
+# Save the resulting composite
+magick::image_write(final_img, "./figure1_v2.png")
+```
+
+
+## - Plot Final Model v3
+
+```{r}
+d0 <- df
+d1 <- df
+
+d0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+d1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+d0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+d1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+pred0 <- predict(fit_final_model_3, newdata = d0, type = "response")
+pred1 <- predict(fit_final_model_3, newdata = d1, type = "response")
+
+df$innervate_gain <- pred1 - pred0
+
+mean(df$innervate_gain,na.rm=T)
+
+```
+
+
+```{r}
+# ------------------------------------------------------------
+# 1. Duration range where you want to estimate the effect
+# ------------------------------------------------------------
+
+duration_grid <- seq(
+  quantile(df$duration_s, 0.01, na.rm = TRUE),
+  quantile(df$duration_s, 0.99, na.rm = TRUE),
+  length.out = 300
+)
+
+# ------------------------------------------------------------
+# 2. Create two counterfactual datasets
+#
+# Start from one valid observation because mage, boss, etc.
+# cancel when we calculate prediction(A=1) - prediction(A=0),
+# provided they do not interact with Innervate.
+# ------------------------------------------------------------
+
+nd0 <- df[rep(1, length(duration_grid)), ]
+nd1 <- nd0
+
+nd0$duration_s <- duration_grid
+nd1$duration_s <- duration_grid
+
+# Set treatment
+nd0$vates <- factor(
+  "0",
+  levels = levels(df$vates)
+)
+
+nd1$vates <- factor(
+  "1",
+  levels = levels(df$vates)
+)
+
+# Ordered factor used in the by-smooth
+nd0$vates_by <- ordered(
+  "0",
+  levels = levels(df$vates_by)
+)
+
+nd1$vates_by <- ordered(
+  "1",
+  levels = levels(df$vates_by)
+)
+
+# ------------------------------------------------------------
+# 3. Use the GAM linear predictor matrix
+# ------------------------------------------------------------
+
+X0 <- predict(fit_final_model_3, newdata = nd0, type = "lpmatrix")
+X1 <- predict(fit_final_model_3, newdata = nd1, type = "lpmatrix")
+
+# Contrast matrix:
+# each row represents prediction(A=1) - prediction(A=0)
+Xd <- X1 - X0
+
+# Estimated DPS gain
+gain <- as.vector(Xd %*% coef(fit_final_model_3))
+
+# ------------------------------------------------------------
+# 4. Standard errors for the contrast
+# ------------------------------------------------------------
+
+V <- vcov(fit_final_model_3)
+
+se <- sqrt(rowSums((Xd %*% V) * Xd))
+
+effect_curve <- tibble(
+  duration_s = duration_grid,
+  gain = gain,
+  se = se,
+  lower = gain - 1.96 * se,
+  upper = gain + 1.96 * se
+)
+```
+
+
+```{r}
+gain_vec <- na.omit(df$innervate_gain)
+ate_mean <- mean(gain_vec)
+ate_se   <- sd(gain_vec) / sqrt(length(gain_vec))
+ate_lower <- ate_mean - 1.96 * ate_se
+ate_upper <- ate_mean + 1.96 * ate_se
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ", round(ate_lower, 1), ", ", round(ate_upper, 1), ")"
+)
+```
+
+```{r}
+boot <- readRDS("./data/post_bootstrap_final_object.rds")
+
+effect_curve <- boot$summary
+
+
+ate_mean  <- boot$overall$estimate
+ate_se    <- boot$overall$boot_se
+ate_lower <- boot$overall$lower
+ate_upper <- boot$overall$upper
+
+ate_label_text <- paste0(
+  "Overall Avg Effect\n",
+  "+", round(ate_mean, 1), " DPS\n",
+  "(95% CI: ",
+  round(ate_lower, 1), ", ",
+  round(ate_upper, 1), ")"
+)
+
+df <- read_csv("./data/df_analysis.csv")
+```
+
+
+```{r}
+df_sim_points <- data.frame(
+  guide_source = factor(c("Wowhead Reference\n(117 DPS)", 
+                          "Icy Veins Reference\n(110 DPS)"), 
+                        levels = c("Wowhead Reference\n(117 DPS)", 
+                                   "Icy Veins Reference\n(110 DPS)")),
+  x = c(120, 180),
+  xmin = c(110, 150),
+  xmax = c(130, 210),
+  y = c(117, 110),
+  pt_color = c("#A41919", "#0095C3"),
+  pt_shape = c(2, 8)
+)
+```
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # Single large diagonal background watermark
+  # ggplot2::annotate("text",
+  #                   x = 325, y = 140,                        # Centered relative to xlim (0-650) and ylim (-20-300)
+  #                   label =  paste0(rep("WORK-IN-PROGRESS WORK-IN-PROGRESS WORK-IN-PROGRESS\n",10),collapse=""),
+  #                   color = "gray75", alpha = 0.25,
+  #                   size = 28, fontface = "bold", angle = 30,
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = pointwise_lower, ymax = pointwise_upper),
+              alpha = 0.18, fill="#04007B")  +
+  
+  # Point 1: Y = 117, X = 120 +/- 10 (Wowhead)
+  ggplot2::annotate("errorbarh", xmin = 110, xmax =130, y = 117, color = "#A41919", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 120, y = 117, color = "#A41919", shape = 2, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 67, y = 101, 
+    label = "Wowhead\nReference\n(117 DPS)", 
+    color = "#A41919", fontface = "bold", size = 7, vjust = 0, lineheight = 0.25
+  ) +
+  
+  # Point 2: Y = 110, X = 180 +/- 30 (Icy Veins)
+  ggplot2::annotate("errorbarh", xmin = 150, xmax = 210, y = 110, color = "#0095C3", alpha = 1, height = 2) +
+  ggplot2::annotate("point", x = 180, y = 110, color = "#0095C3", shape = 8, alpha = 1, size = 2.5) +
+  ggplot2::annotate(
+    "text", x = 185, y = 98, 
+    label = "Icy Veins\nReference\n(110 DPS)", 
+    color = "#0095C3", fontface = "bold", size = 7, vjust = 1, lineheight = 0.25
+  ) +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% dplyr::filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.01, color="black")+
+  
+  # --- ENCOUNTER DURATION MARKERS ---
+  
+  # 1. Shortest: 99th Pct Karathress (47s)
+  ggplot2::annotate("segment", x = 134, xend = 134, y = -20, yend = 15,
+                    color = "#5E35B1", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 134-5, y = 5,
+                    label = "Shortest Avg Encounter\nHigh Astromancer Solarian\n(~2m 20s)",
+                    color = "#5E35B1",  alpha=0.75, size = 5, fontface = "bold", vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 2. Average Encounter Duration (200s)
+  ggplot2::annotate("segment", x = 262, xend = 262, y = -20, yend = 15,
+                    color = "grey30", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 262-5, y = 5,
+                    label = "Avg Encounter Duration\nAll SSC/TK Bosses\n(~4m 20s)",
+                    color = "grey30",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # 3. Longest 99th Pct: Kael/Vashj (~370s; using 370 as a middle ground for 6:07 and 6:13)
+  ggplot2::annotate("segment", x = 495, xend = 495, y = -20, yend = 15,
+                    color = "#2E7D32", linewidth = 0.5, linetype = "dashed") +
+  ggplot2::annotate("text", x = 495-5, y = 5,
+                    label = "Longest Avg Encounter\nKael'thas Sunstrider\n(~8m 15s)",
+                    color = "#2E7D32",  alpha=0.75, size = 5, fontface = "bold", 
+                    vjust = 0, hjust = 1, lineheight = 0.25) +
+  
+  # ----------------------------------
+
+ggplot2::annotate(
+  "label", x = 410, y = 240,
+  label = ate_label_text,
+  fill = "#F4F4F9", color = "#04007B", 
+  fontface = "bold", size = scale_factor*4.5, 
+  linewidth = 0.5, lineheight = .4
+) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,300)) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on <b><span style='color:#3FC7EB;'>Arcane Mage</span></b> DPS<img src='https://wow.zamimg.com/images/wow/icons/large/spell_holy_magicalsentry.jpg' width='11' height='11' style='vertical-align:middle;'/>",
+    subtitle = "1,650 Logs containing 9,501 Encounters. Raiding weeks 24-25 of TBC Fresh: Phase 2 SSC & TK<br>Methodology accounts for player, raid, external buffs, and encounter factors. Shaded region: 95% CI.",
+    
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG\u00A0&bull; &nbsp;Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 14/08/2026 (dd/mm/yyyy) 01:00 UTC"
+    ))+
+  
+  vivax_theme() +
+  
+  # Position legend in bottom-left inside plot (above Y=0)
+  theme(
+    legend.position = c(0.17, 0.19),           # Relative (x, y) coordinates within plot space
+    legend.direction = "vertical",             # Vertical orientation
+    legend.margin = margin(t = 4, r = 6, b = 4, l = 6)
+  )
+```
+
+```{r}
+ggsave(paste0("./figure1_v3.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+```{r}
+plot <- magick::image_read("figure1_v3.png")
+target_width <- round(2100 * 0.1)
+
+button_img <- magick::image_read("button_magecord.png",paste0(target_width))
+
+
+button_img_scaled <- magick::image_scale(button_img, paste0(target_width))
+
+# Composite the button centered near the bottom (adjust offset +0+Y for vertical
+# depth)
+final_img <- magick::image_composite(
+  plot, 
+  button_img_scaled, 
+  operator = "Over", 
+  gravity = "South", 
+  offset = "+45+15"
+)
+
+# Save the resulting composite
+magick::image_write(final_img, "./figure1_v3.png")
+```
+
+
+
+## - Residuals
+
+```{r}
+df_investigate <- df %>%
+  mutate(residual = residuals(fit, type = "deviance"))
+
+# 2. Filter for the extreme negative tail (based on your plot's y-axis)
+extreme_negatives <- df_investigate %>%
+  filter(residual < -400) %>% 
+  arrange(residual) # Sorts so the absolute worst offenders are at the top
+
+# 3. View the relevant columns to see what happened
+extreme_negatives %>%
+  select(actorID.x, encounterID, amount, duration_s, residual) %>%
+  head(20)
+```
+
+# OTHER PLOTS
+
+## - Arcane Mage Kills 
+
+### + Duration vs DPS
+
+```{r}
+df_full_curated %>%
+  
+  filter(class=="Mage" & spec=="Arcane" & is.na(deaths)) %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  ggplot() + 
+  geom_point(aes(x= duration_s, y=amount)) +
+  geom_smooth(aes(x= duration_s, y=amount),method = "gam") +
+  facet_wrap(encounterName ~. ,scales="free") +
+  
+  theme_bw()
+```
+
+### + ilvl vs DPS
+
+```{r}
+df_full_curated %>%
+  
+  filter(class=="Mage" & spec=="Arcane") %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  ggplot() + 
+  geom_point(aes(x= averageItemLevel, y=amount)) +
+  facet_wrap(encounterName ~.,scales="free") +
+  
+  theme_bw()
+```
+
+### + Ranking vs DPS
+
+```{r}
+df_full %>%
+  
+  filter(class=="Mage" & spec=="Arcane") %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  ggplot() + 
+  geom_point(aes(x= as.integer(substr(rank,2,100)), y=amount)) +
+  facet_wrap(encounterName ~.,scales="free") +
+  
+  theme_bw()
+```
+
+### + Parse vs DPS
+
+```{r}
+df_full %>%
+  
+  filter(class=="Mage" & spec=="Arcane") %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  
+  ggplot() + 
+  geom_point(aes(x= rankPercent, y=amount, alpha = 0.05),stroke=NA,size=2) +
+  geom_vline(xintercept = 90, ) +
+  
+  
+  facet_wrap(encounterName ~.,scales="free") +
+  
+  theme_bw()
+```
+
+
+```{r}
+df_full %>%
+  
+  filter(class=="Mage" & spec=="Arcane") %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  group_by(encounterName, rankPercent) %>%
+  summarise(amount=mean(amount),
+            n=n()) %>%
+  
+  ggplot() + 
+  geom_point(aes(x= rankPercent, y=amount, size=n)) +
+  geom_vline(xintercept = 90, ) +
+  
+  
+  facet_wrap(encounterName ~.,scales="free") +
+  
+  theme_bw()
+```
+
+
+
+```{r}
+df_full %>%
+  
+  filter(class=="Mage" & spec=="Arcane") %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  ggplot() + 
+  geom_point(aes(x= as.integer(substr(rank,2,100)), y=rankPercent)) +
+  facet_wrap(encounterName ~.,scales="free") +
+  
+  theme_bw()
+```
+
+
+
+## - Innervate
+
+
+```{r}
+df_events %>%
+  filter(type %in% c("cast","removebuff")) %>%
+  wcl_add_relative_time(.) %>%
+  group_by(encounterID,encounterName,
+           time_since_fight_start) %>%
+  summarize(n=n()) %>%
+  
+  ggplot() + 
+  
+  geom_line(aes(x=time_since_fight_start, y=n)) +
+  facet_wrap(encounterName~.,scale="free") +
+  
+  theme_bw()
+```
+
+
+```{r}
+df_fights_kills %>% 
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                kill,duration,duration_s,
+                averageItemLevel) %>%
+  left_join(df_events %>%
+              filter(type %in% c("cast","removebuff")) %>%
+              wcl_add_relative_time(.),
+            by=c("logID","fightID",
+                 "encounterID","encounterName","duration_s",
+                 "kill")) %>%
+  group_by(encounterID,encounterName, type,
+           time_since_fight_start) %>%
+  summarize(n=n()) %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  
+  filter(!is.na(time_since_fight_start)) %>%
+  ggplot() + 
+  
+  geom_line(aes(x=time_since_fight_start, y=n)) +
+  facet_wrap(encounterName~type,scales="free") +
+  
+  theme_bw()
+```
+
+
+
+
+
+
+
+```{r}
+df_fights_kills %>% 
+  dplyr::select(logID,fightID,encounterID,encounterName,
+                kill,duration,duration_s,
+                averageItemLevel) %>%
+  left_join(df_events %>%
+              filter(type %in% c("cast")) %>%
+              wcl_add_relative_time(.),
+            by=c("logID","fightID",
+                 "encounterID","encounterName","duration_s",
+                 "kill")) %>%
+  
+  mutate(time_until_end = round(duration_s - time_since_fight_start)) %>%
+  
+  group_by(encounterID,encounterName,
+           time_until_end) %>%
+  summarize(n=n()) %>%
+  filter(encounterID %in% VALID_ENCOUNTERS) %>%
+  
+  filter(!is.na(time_until_end)) %>%
+  
+  
+  ggplot() + 
+  
+  geom_line(aes(x=time_until_end, y=n)) +
+  geom_vline(xintercept=20) + 
+  facet_wrap(encounterName ~ .,scale="free") +
+  theme_bw()
+```
+
+## Test plots
+
+```{r}
+p <- ggplot(effect_curve,
+            aes(x = duration_s, y = gain)) +
+  
+  # 95% confidence interval
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              alpha = 0.18,fill="#04007B") +
+  
+  # Estimated causal contrast
+  geom_line(linewidth = 1.1) +
+  
+  # Reference: no effect
+  geom_hline(yintercept = 0,
+             linetype = "dashed", linewidth = 0.5, color="gray50") +
+  
+  ggplot2::annotate(
+    "rect",
+    xmin = 150, xmax = 210,
+    ymin = 80,  ymax = 140,
+    fill = "#111116", alpha = 0.18
+  ) +
+  
+  # Text directly on top of the rectangle
+  ggplot2::annotate(
+    "text", 
+    x = 150,           # Midpoint between xmin (120) and xmax (180)
+    y = 140,           # Top edge of ymax
+    label = "Icy Veins Estimate",
+    color = "#111116", 
+    fontface = "bold", 
+    size = scale_factor * 3.5,
+    vjust = -0.5        # Places text right above the top boundary
+  )+
+  
+  
+  # # Show where actual fights occurred
+  geom_rug(data = df %>% filter(vates %in% c("0", "1")),
+           aes(x = duration_s),
+           inherit.aes = FALSE, sides = "b", alpha = 0.05, color="black") +
+  
+  ggplot2::annotate(
+    "label", x = 510, y = 240,
+    label = ate_label_text,
+    fill = "#F4F4F9", color = "#04007B", 
+    fontface = "bold", size = scale_factor*3.5, 
+    linewidth = 0.5, lineheight = .4
+  ) + 
+  
+  scale_x_continuous(breaks = c(0,seq(50,700,100))) + 
+  scale_y_continuous(breaks = c(seq(0,400,50))) + 
+  coord_cartesian(xlim = c(0,650), ylim =c(-20,320),expand = F) +
+  
+  labs(
+    x = "Fight duration (seconds)",
+    y = "Estimated DPS Gain from Innervate",
+    title = "Estimated effect of one (1) Innervate on <b><span style='color:#3FC7EB;'>Arcane Mage</span></b> DPS",
+    subtitle = "Solid line: estimated difference in DPS; shaded region: 95% confidence interval.",
+    # Map the LEFT side text to the 'tag'
+    tag = paste0(
+      "<span style='font-family:forgefooter'>&#xe900;</span> &nbsp; discord.gg/wp55kqmyYG - Discfordge &#91;Vivax-Pagle(US)&#93;<br>",
+      "<span style='font-family:forgefooter'>&#xe901;</span> https:&#47;&#47;www&#46;github.com/ForgeGit/Mage_Innervate_DPS"
+    ),
+    
+    # Map the RIGHT side text to the 'caption'
+    caption = paste0(
+      "Buy me a coffee: https:&#47;&#47;www.ko-fi.com/forge<br>",
+      "Version 1 - 11/08/2026 (dd/mm/yyyy) 13:00 UTC"
+    )
+  ) +
+  
+  vivax_theme() 
+
+```
+
+```{r}
+ggsave(paste0("./figure1_ICY3.png"), p, 
+       width = 7, height = 4, units="in", dpi=300, 
+       device = "png")
+```
+
+
+```{r}
+p
+```
