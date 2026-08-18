@@ -1,6 +1,8 @@
 # **Innervate Returns on Arcane Mage DPS**
 ### _A Real-World Analysis of 1,650 Logs containing 9,501 Encounters in TBC Classic Anniversary_
 
+_Vivax (Pagle-US) -_ `Discfordge` _(Discord)_
+
 Simulations (_sims_) are useful but sometimes questioned [[1](https://discord.com/channels/253212375790911489/817495452328001536/1534925337581064302)] because the simplified scenarios they simulate (‘_Patchwerk fights_’) [[2](<https://github.com/ForgeGit/naxx_mage_movement>)] can differ substantially from real raid encounters, where mechanics (‘"_don’t stand on fire_"’) and player execution carry a significant role [[3](<https://github.com/ForgeGit/class_cope>)].
 
 Innervate (spell ID: `29166`) is an instant-cast Druid skill with a 6-minute cooldown used to regenerate mana. When assigned to a DPS, Arcane Mages are commonly considered the best recipients [[4](https://www.wowhead.com/tbc/guide/classes/druid/feral/dps-rotation-cooldowns-abilities-pve),[5](https://www.wowhead.com/tbc/guide/classes/druid/feral/tank-rotation-cooldowns-abilities-pve)].  _Sims_ from both current and previous versions of _The Burning Crusade_ (TBC) suggest that giving Innervate to an Arcane Mage can increase their damage output by at least ~100 DPS [[6](https://discord.com/channels/253212375790911489/817495452328001536/837273535356862465),[7](https://discord.com/channels/253212375790911489/817495452328001536/884173843248316486),[8](https://discord.com/channels/253212375790911489/817495452328001536/1535312592111927396),[9](https://discord.com/channels/253212375790911489/812641242222821376/972068177964068875),[10](https://discord.com/channels/253212375790911489/812641242222821376/820088886171533370)].
